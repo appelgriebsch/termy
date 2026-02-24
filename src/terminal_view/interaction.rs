@@ -1439,15 +1439,9 @@ impl TerminalView {
     }
 
     fn scroll_to_bottom(&mut self, cx: &mut Context<Self>) {
-        let (display_offset, _) = self.active_terminal().scroll_state();
-        if display_offset > 0 {
-            // Scroll down to offset 0 (live output).
-            let changed = self
-                .active_terminal()
-                .scroll_display(-(display_offset as i32));
-            if changed {
-                self.mark_terminal_scrollbar_activity(cx);
-            }
+        if self.active_terminal().scroll_to_bottom() {
+            self.mark_terminal_scrollbar_activity(cx);
+            cx.notify();
         }
     }
 
@@ -1538,9 +1532,16 @@ impl TerminalView {
 
         if !self.selection_dragging || !event.dragging() {
             if Self::is_link_modifier(event.modifiers) {
-                let next = self
-                    .position_to_cell(event.position, false)
-                    .and_then(|cell| self.link_at_cell(cell));
+                let hover_cell = self.position_to_cell(event.position, false);
+                if let (Some(cell), Some(current)) = (hover_cell, self.hovered_link.as_ref()) {
+                    if current.row == cell.row
+                        && (current.start_col..=current.end_col).contains(&cell.col)
+                    {
+                        return;
+                    }
+                }
+
+                let next = hover_cell.and_then(|cell| self.link_at_cell(cell));
                 if self.hovered_link != next {
                     self.hovered_link = next;
                     cx.notify();
