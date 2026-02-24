@@ -58,6 +58,14 @@ pub fn classify_link_token(token: &str) -> Option<String> {
         return Some(format!("https://{}", token));
     }
 
+    if lower.starts_with("file://") {
+        return Some(token.to_string());
+    }
+
+    if looks_like_file_path(token) {
+        return Some(format!("file://{}", token));
+    }
+
     if is_ipv4_with_optional_port_and_path(token) || looks_like_domain(token) {
         return Some(format!("http://{}", token));
     }
@@ -155,4 +163,73 @@ fn looks_like_domain(input: &str) -> bool {
     }
 
     true
+}
+
+fn looks_like_file_path(input: &str) -> bool {
+    // Strip optional line:col suffix (e.g., "file.rs:42" or "file.rs:42:10")
+    let path = strip_line_col_suffix(input);
+
+    if path.is_empty() {
+        return false;
+    }
+
+    // Absolute Unix paths
+    if path.starts_with('/') {
+        return has_path_like_structure(path);
+    }
+
+    // Home directory paths
+    if path.starts_with("~/") {
+        return has_path_like_structure(path);
+    }
+
+    // Relative paths starting with ./ or ../
+    if path.starts_with("./") || path.starts_with("../") {
+        return has_path_like_structure(path);
+    }
+
+    // Windows absolute paths (C:\, D:\, etc.)
+    if path.len() >= 3 {
+        let bytes = path.as_bytes();
+        if bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && (bytes[2] == b'\\' || bytes[2] == b'/') {
+            return has_path_like_structure(path);
+        }
+    }
+
+    false
+}
+
+fn strip_line_col_suffix(input: &str) -> &str {
+    // Handle patterns like "file.rs:42" or "file.rs:42:10"
+    let mut path = input;
+
+    // Try to strip :col suffix first
+    if let Some(colon_pos) = path.rfind(':') {
+        let suffix = &path[colon_pos + 1..];
+        if !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit()) {
+            path = &path[..colon_pos];
+            // Try to strip :line suffix
+            if let Some(colon_pos2) = path.rfind(':') {
+                let suffix2 = &path[colon_pos2 + 1..];
+                if !suffix2.is_empty() && suffix2.chars().all(|c| c.is_ascii_digit()) {
+                    path = &path[..colon_pos2];
+                }
+            }
+        }
+    }
+
+    path
+}
+
+fn has_path_like_structure(path: &str) -> bool {
+    // Must contain at least one path separator or have a file extension
+    let has_separator = path.contains('/') || path.contains('\\');
+    let has_extension = path.rfind('.').is_some_and(|dot_pos| {
+        let after_dot = &path[dot_pos + 1..];
+        !after_dot.is_empty()
+            && after_dot.len() <= 10
+            && after_dot.chars().all(|c| c.is_ascii_alphanumeric())
+    });
+
+    has_separator || has_extension
 }
