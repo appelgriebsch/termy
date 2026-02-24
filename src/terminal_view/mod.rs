@@ -49,6 +49,7 @@ mod titles;
 mod update_toasts;
 
 use inline_input::{InlineInputAlignment, InlineInputState};
+pub(crate) use tab_strip::constants::*;
 use tab_strip::state::TabStripState;
 
 const MIN_FONT_SIZE: f32 = 8.0;
@@ -58,41 +59,6 @@ const ZOOM_STEP: f32 = 1.0;
 const TITLEBAR_HEIGHT: f32 = 32.0;
 #[cfg(not(target_os = "windows"))]
 const TITLEBAR_HEIGHT: f32 = 34.0;
-const TABBAR_HEIGHT: f32 = 34.0;
-const TOP_STRIP_SIDE_PADDING: f32 = 8.0;
-#[cfg(macos_sdk_26)]
-const TOP_STRIP_MACOS_TRAFFIC_LIGHT_PADDING: f32 = 78.0;
-#[cfg(not(macos_sdk_26))]
-const TOP_STRIP_MACOS_TRAFFIC_LIGHT_PADDING: f32 = 71.0;
-const TOP_STRIP_CONTENT_OFFSET_Y: f32 = 0.0;
-const TAB_HORIZONTAL_PADDING: f32 = 8.0;
-const TAB_ITEM_HEIGHT: f32 = 32.0;
-const TAB_ITEM_GAP: f32 = 0.0;
-const TAB_TEXT_PADDING_X: f32 = 10.0;
-const TAB_TITLE_CHAR_WIDTH: f32 = 7.0;
-const TAB_TITLE_BUDGET_CLOSE_GUARD_PX: f32 = TAB_TITLE_CHAR_WIDTH * 1.5;
-const TAB_TITLE_BUDGET_HIDDEN_CLOSE_GUARD_PX: f32 = TAB_TITLE_CHAR_WIDTH;
-// Adds a small cushion to avoid early clipping from glyph/metrics variance.
-const TAB_TITLE_LAYOUT_SLACK_PX: f32 = 18.0;
-const TAB_MIN_WIDTH: f32 = 96.0;
-const TAB_MAX_WIDTH: f32 = 420.0;
-const TAB_ADAPTIVE_GROWTH_FACTOR: f32 = 0.85;
-const TAB_ADAPTIVE_HARD_CAP_RATIO: f32 = 0.60;
-const TAB_CLOSE_SLOT_WIDTH: f32 = 24.0;
-const TAB_CLOSE_HITBOX: f32 = TAB_CLOSE_SLOT_WIDTH;
-const TAB_STROKE_FOREGROUND_MIX: f32 = 0.12;
-const TAB_STROKE_THICKNESS: f32 = 1.0;
-const TAB_DROP_MARKER_WIDTH: f32 = 2.0;
-const TAB_DROP_MARKER_INSET_Y: f32 = 3.0;
-const TAB_DRAG_AUTOSCROLL_EDGE_WIDTH: f32 = 32.0;
-const TAB_DRAG_AUTOSCROLL_MAX_STEP: f32 = 24.0;
-const TABBAR_ACTION_RAIL_WIDTH: f32 = 36.0;
-const TABBAR_NEW_TAB_BUTTON_SIZE: f32 = 22.0;
-const TABBAR_NEW_TAB_BUTTON_RADIUS: f32 = 2.0;
-const TABBAR_NEW_TAB_ICON_SIZE: f32 = 13.0;
-const TABBAR_NEW_TAB_ICON_BASELINE_NUDGE_Y: f32 = -1.0;
-const TAB_STRIP_SCROLL_EPSILON: f32 = 0.5;
-const TAB_STRIP_WHEEL_DELTA_LINE_REFERENCE_PX: f32 = 16.0;
 const MAX_TAB_TITLE_CHARS: usize = 96;
 const DEFAULT_TAB_TITLE: &str = "Terminal";
 const COMMAND_TITLE_DELAY_MS: u64 = 250;
@@ -1238,44 +1204,6 @@ impl TerminalView {
             true
         } else {
             false
-        }
-    }
-
-    pub(super) fn scroll_active_tab_into_view(&self) {
-        if self.active_tab >= self.tabs.len() {
-            return;
-        }
-
-        let viewport_width = self.tab_strip.layout_last_synced_viewport_width.max(0.0);
-        if viewport_width <= f32::EPSILON {
-            return;
-        }
-
-        let max_scroll = self.tab_strip_scroll_max_x();
-        let mut tab_left = TAB_HORIZONTAL_PADDING;
-        for (index, tab) in self.tabs.iter().enumerate() {
-            let tab_right = tab_left + tab.display_width;
-            if index == self.active_tab {
-                let offset = self.tab_strip.scroll_handle.offset();
-                let current_scroll = -Into::<f32>::into(offset.x);
-                let mut target_scroll = current_scroll;
-                if tab_left < current_scroll {
-                    target_scroll = tab_left;
-                } else if tab_right > current_scroll + viewport_width {
-                    target_scroll = tab_right - viewport_width;
-                }
-
-                let clamped_scroll = target_scroll.clamp(0.0, max_scroll);
-                let next_offset_x = -clamped_scroll;
-                let current_offset_x: f32 = offset.x.into();
-                if (next_offset_x - current_offset_x).abs() > f32::EPSILON {
-                    self.tab_strip
-                        .scroll_handle
-                        .set_offset(point(px(next_offset_x), offset.y));
-                }
-                return;
-            }
-            tab_left = tab_right + TAB_ITEM_GAP;
         }
     }
 

@@ -1772,6 +1772,23 @@ mod tests {
     }
 
     #[test]
+    fn titlebar_single_click_non_interactive_arms_window_move() {
+        assert!(TerminalView::titlebar_move_armed_after_mouse_down(false, 1));
+    }
+
+    #[test]
+    fn titlebar_single_click_interactive_does_not_arm_window_move() {
+        assert!(!TerminalView::titlebar_move_armed_after_mouse_down(true, 1));
+    }
+
+    #[test]
+    fn titlebar_double_click_non_interactive_does_not_arm_window_move() {
+        assert!(!TerminalView::titlebar_move_armed_after_mouse_down(
+            false, 2
+        ));
+    }
+
+    #[test]
     fn titlebar_move_arm_state_transitions_on_mouse_up() {
         assert!(!TerminalView::titlebar_move_armed_after_mouse_up());
     }

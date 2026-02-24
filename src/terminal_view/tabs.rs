@@ -28,6 +28,44 @@ impl TerminalView {
         self.tab_strip_expected_max_scroll_for_viewport(self.tab_strip.layout_last_synced_viewport_width)
     }
 
+    pub(super) fn scroll_active_tab_into_view(&self) {
+        if self.active_tab >= self.tabs.len() {
+            return;
+        }
+
+        let viewport_width = self.tab_strip.layout_last_synced_viewport_width.max(0.0);
+        if viewport_width <= f32::EPSILON {
+            return;
+        }
+
+        let max_scroll = self.tab_strip_scroll_max_x();
+        let mut tab_left = TAB_HORIZONTAL_PADDING;
+        for (index, tab) in self.tabs.iter().enumerate() {
+            let tab_right = tab_left + tab.display_width;
+            if index == self.active_tab {
+                let offset = self.tab_strip.scroll_handle.offset();
+                let current_scroll = -Into::<f32>::into(offset.x);
+                let mut target_scroll = current_scroll;
+                if tab_left < current_scroll {
+                    target_scroll = tab_left;
+                } else if tab_right > current_scroll + viewport_width {
+                    target_scroll = tab_right - viewport_width;
+                }
+
+                let clamped_scroll = target_scroll.clamp(0.0, max_scroll);
+                let next_offset_x = -clamped_scroll;
+                let current_offset_x: f32 = offset.x.into();
+                if (next_offset_x - current_offset_x).abs() > f32::EPSILON {
+                    self.tab_strip
+                        .scroll_handle
+                        .set_offset(point(px(next_offset_x), offset.y));
+                }
+                return;
+            }
+            tab_left = tab_right + TAB_ITEM_GAP;
+        }
+    }
+
     fn clear_tab_drag_preview_state(&mut self) {
         self.tab_strip.drag_pointer_x = None;
         self.tab_strip.drag_viewport_width = 0.0;
@@ -185,7 +223,7 @@ impl TerminalView {
         changed
     }
 
-    fn bump_tab_layout_revision(&mut self) {
+    pub(super) fn mark_tab_strip_layout_dirty(&mut self) {
         self.tab_strip.layout_revision = self.tab_strip.layout_revision.wrapping_add(1);
     }
 
@@ -456,7 +494,7 @@ impl TerminalView {
         self.tabs.push(TerminalTab::new(terminal, predicted_title));
         self.active_tab = self.tabs.len() - 1;
         self.refresh_tab_title(self.active_tab);
-        self.bump_tab_layout_revision();
+        self.mark_tab_strip_layout_dirty();
         self.renaming_tab = None;
         self.rename_input.clear();
         self.inline_input_selecting = false;
@@ -474,7 +512,7 @@ impl TerminalView {
         }
 
         self.tabs.remove(index);
-        self.bump_tab_layout_revision();
+        self.mark_tab_strip_layout_dirty();
 
         if self.active_tab > index {
             self.active_tab -= 1;
