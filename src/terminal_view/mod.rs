@@ -11,7 +11,7 @@ use flume::{Sender, bounded};
 use gpui::{
     AnyElement, App, AsyncApp, ClipboardItem, Context, Element, ExternalPaths, FocusHandle,
     Focusable, Font, FontWeight, InteractiveElement, IntoElement, KeyDownEvent, MouseButton,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render, ScrollHandle,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render,
     ScrollWheelEvent, SharedString, Size, StatefulInteractiveElement, Styled, TouchPhase,
     UniformListScrollHandle, WeakEntity, Window, WindowBackgroundAppearance, div, point, px,
 };
@@ -42,12 +42,14 @@ mod render;
 mod scrollbar;
 mod search;
 mod tab_chrome;
+mod tab_strip;
 mod tabs;
 mod titles;
 #[cfg(target_os = "macos")]
 mod update_toasts;
 
 use inline_input::{InlineInputAlignment, InlineInputState};
+use tab_strip::state::TabStripState;
 
 const MIN_FONT_SIZE: f32 = 8.0;
 const MAX_FONT_SIZE: f32 = 40.0;
@@ -89,7 +91,8 @@ const TABBAR_NEW_TAB_BUTTON_SIZE: f32 = 22.0;
 const TABBAR_NEW_TAB_BUTTON_RADIUS: f32 = 2.0;
 const TABBAR_NEW_TAB_ICON_SIZE: f32 = 13.0;
 const TABBAR_NEW_TAB_ICON_BASELINE_NUDGE_Y: f32 = -1.0;
-const TAB_STRIP_LEFT_PADDING_ITEM_OFFSET: usize = 1;
+const TAB_STRIP_SCROLL_EPSILON: f32 = 0.5;
+const TAB_STRIP_WHEEL_DELTA_LINE_REFERENCE_PX: f32 = 16.0;
 const MAX_TAB_TITLE_CHARS: usize = 96;
 const DEFAULT_TAB_TITLE: &str = "Terminal";
 const COMMAND_TITLE_DELAY_MS: u64 = 250;
@@ -171,25 +174,6 @@ pub(super) struct TerminalViewportGeometry {
 #[derive(Clone, Copy, Debug)]
 struct TerminalScrollbarDragState {
     thumb_grab_offset: f32,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct TabDragState {
-    source_index: usize,
-    drop_slot: Option<usize>,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub(super) struct TabStripGeometry {
-    pub(super) row_start_x: f32,
-    pub(super) row_width: f32,
-    pub(super) tabs_viewport_width: f32,
-    pub(super) action_rail_start_x: f32,
-    pub(super) action_rail_width: f32,
-    pub(super) button_start_x: f32,
-    pub(super) button_end_x: f32,
-    pub(super) button_start_y: f32,
-    pub(super) button_end_y: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -551,7 +535,7 @@ pub struct TerminalView {
     command_palette_filtered_items: Vec<CommandPaletteItem>,
     command_palette_selected: usize,
     command_palette_scroll_handle: UniformListScrollHandle,
-    tab_strip_scroll_handle: ScrollHandle,
+    tab_strip: TabStripState,
     command_palette_scroll_target_y: Option<f32>,
     command_palette_scroll_max_y: f32,
     command_palette_scroll_animating: bool,
@@ -560,15 +544,6 @@ pub struct TerminalView {
     inline_input_selecting: bool,
     terminal_scroll_accumulator_y: f32,
     input_scroll_suppress_until: Option<Instant>,
-    hovered_tab: Option<usize>,
-    hovered_tab_close: Option<usize>,
-    tab_drag: Option<TabDragState>,
-    tab_drag_pointer_x: Option<f32>,
-    tab_drag_viewport_width: f32,
-    tab_drag_autoscroll_animating: bool,
-    tab_layout_revision: u64,
-    tab_layout_last_synced_revision: u64,
-    tab_layout_last_synced_viewport_width: f32,
     titlebar_move_armed: bool,
     terminal_scrollbar_visibility: TerminalScrollbarVisibility,
     terminal_scrollbar_style: TerminalScrollbarStyle,
@@ -1040,7 +1015,7 @@ impl TerminalView {
             command_palette_filtered_items: Vec::new(),
             command_palette_selected: 0,
             command_palette_scroll_handle: UniformListScrollHandle::new(),
-            tab_strip_scroll_handle: ScrollHandle::new(),
+            tab_strip: TabStripState::new(),
             command_palette_scroll_target_y: None,
             command_palette_scroll_max_y: 0.0,
             command_palette_scroll_animating: false,
@@ -1049,15 +1024,6 @@ impl TerminalView {
             inline_input_selecting: false,
             terminal_scroll_accumulator_y: 0.0,
             input_scroll_suppress_until: None,
-            hovered_tab: None,
-            hovered_tab_close: None,
-            tab_drag: None,
-            tab_drag_pointer_x: None,
-            tab_drag_viewport_width: 0.0,
-            tab_drag_autoscroll_animating: false,
-            tab_layout_revision: 0,
-            tab_layout_last_synced_revision: 0,
-            tab_layout_last_synced_viewport_width: f32::NAN,
             titlebar_move_armed: false,
             terminal_scrollbar_visibility: config.terminal_scrollbar_visibility,
             terminal_scrollbar_style: config.terminal_scrollbar_style,
@@ -1276,13 +1242,40 @@ impl TerminalView {
     }
 
     pub(super) fn scroll_active_tab_into_view(&self) {
-        if self.active_tab < self.tabs.len() {
-            // render.rs inserts the left padding spacer as child index 0 in the tracked
-            // tab strip, so tab N is rendered at scroll item N + TAB_STRIP_LEFT_PADDING_ITEM_OFFSET.
-            self.tab_strip_scroll_handle.scroll_to_item(
-                self.active_tab
-                    .saturating_add(TAB_STRIP_LEFT_PADDING_ITEM_OFFSET),
-            );
+        if self.active_tab >= self.tabs.len() {
+            return;
+        }
+
+        let viewport_width = self.tab_strip.layout_last_synced_viewport_width.max(0.0);
+        if viewport_width <= f32::EPSILON {
+            return;
+        }
+
+        let max_scroll = self.tab_strip_scroll_max_x();
+        let mut tab_left = TAB_HORIZONTAL_PADDING;
+        for (index, tab) in self.tabs.iter().enumerate() {
+            let tab_right = tab_left + tab.display_width;
+            if index == self.active_tab {
+                let offset = self.tab_strip.scroll_handle.offset();
+                let current_scroll = -Into::<f32>::into(offset.x);
+                let mut target_scroll = current_scroll;
+                if tab_left < current_scroll {
+                    target_scroll = tab_left;
+                } else if tab_right > current_scroll + viewport_width {
+                    target_scroll = tab_right - viewport_width;
+                }
+
+                let clamped_scroll = target_scroll.clamp(0.0, max_scroll);
+                let next_offset_x = -clamped_scroll;
+                let current_offset_x: f32 = offset.x.into();
+                if (next_offset_x - current_offset_x).abs() > f32::EPSILON {
+                    self.tab_strip
+                        .scroll_handle
+                        .set_offset(point(px(next_offset_x), offset.y));
+                }
+                return;
+            }
+            tab_left = tab_right + TAB_ITEM_GAP;
         }
     }
 

@@ -1,4 +1,5 @@
 use super::*;
+use super::tab_strip::state::TabDragState;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum TabDropMarkerSide {
@@ -12,67 +13,48 @@ pub(super) struct TabStripOverflowState {
     pub(super) right: bool,
 }
 
-impl TabStripGeometry {
-    pub(super) fn tabs_viewport_end_x(self) -> f32 {
-        self.row_start_x + self.tabs_viewport_width
-    }
-
-    pub(super) fn action_rail_end_x(self) -> f32 {
-        self.action_rail_start_x + self.action_rail_width
-    }
-
-    pub(super) fn contains_tabs_viewport_x(self, x: f32) -> bool {
-        x >= self.row_start_x && x <= self.tabs_viewport_end_x()
-    }
-
-    pub(super) fn contains_action_rail_x(self, x: f32) -> bool {
-        x >= self.action_rail_start_x && x <= self.action_rail_end_x()
-    }
-
-    pub(super) fn new_tab_button_contains(self, x: f32, y: f32) -> bool {
-        x >= self.button_start_x
-            && x <= self.button_end_x
-            && y >= self.button_start_y
-            && y <= self.button_end_y
-    }
-}
-
 impl TerminalView {
-    pub(super) fn titlebar_left_padding_for_platform() -> f32 {
-        if cfg!(target_os = "macos") {
-            TOP_STRIP_MACOS_TRAFFIC_LIGHT_PADDING
-        } else {
-            TOP_STRIP_SIDE_PADDING
-        }
+    pub(super) fn tab_strip_fixed_content_width(&self) -> f32 {
+        let tabs_width: f32 = self.tabs.iter().map(|tab| tab.display_width).sum();
+        let gaps = TAB_ITEM_GAP * self.tabs.len().saturating_sub(1) as f32;
+        TAB_HORIZONTAL_PADDING + tabs_width + gaps + TAB_HORIZONTAL_PADDING
+    }
+
+    pub(super) fn tab_strip_expected_max_scroll_for_viewport(&self, viewport_width: f32) -> f32 {
+        (self.tab_strip_fixed_content_width() - viewport_width.max(0.0)).max(0.0)
+    }
+
+    pub(super) fn tab_strip_scroll_max_x(&self) -> f32 {
+        self.tab_strip_expected_max_scroll_for_viewport(self.tab_strip.layout_last_synced_viewport_width)
     }
 
     fn clear_tab_drag_preview_state(&mut self) {
-        self.tab_drag_pointer_x = None;
-        self.tab_drag_viewport_width = 0.0;
-        self.tab_drag_autoscroll_animating = false;
+        self.tab_strip.drag_pointer_x = None;
+        self.tab_strip.drag_viewport_width = 0.0;
+        self.tab_strip.drag_autoscroll_animating = false;
     }
 
     fn ensure_tab_drag_autoscroll_animation(&mut self, cx: &mut Context<Self>) {
-        if self.tab_drag_autoscroll_animating {
+        if self.tab_strip.drag_autoscroll_animating {
             return;
         }
-        self.tab_drag_autoscroll_animating = true;
+        self.tab_strip.drag_autoscroll_animating = true;
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             loop {
                 smol::Timer::after(Duration::from_millis(16)).await;
                 let keep_animating = match cx.update(|cx| {
                     this.update(cx, |view, cx| {
-                        if !view.tab_drag_autoscroll_animating || view.tab_drag.is_none() {
-                            view.tab_drag_autoscroll_animating = false;
+                        if !view.tab_strip.drag_autoscroll_animating || view.tab_strip.drag.is_none() {
+                            view.tab_strip.drag_autoscroll_animating = false;
                             return false;
                         }
 
-                        let Some(pointer_x) = view.tab_drag_pointer_x else {
-                            view.tab_drag_autoscroll_animating = false;
+                        let Some(pointer_x) = view.tab_strip.drag_pointer_x else {
+                            view.tab_strip.drag_autoscroll_animating = false;
                             return false;
                         };
-                        let viewport_width = view.tab_drag_viewport_width;
+                        let viewport_width = view.tab_strip.drag_viewport_width;
                         let scrolled =
                             view.auto_scroll_tab_strip_during_drag(pointer_x, viewport_width);
                         let marker_changed = view.update_tab_drag_marker(pointer_x, cx);
@@ -80,7 +62,7 @@ impl TerminalView {
                             cx.notify();
                         }
                         if !scrolled {
-                            view.tab_drag_autoscroll_animating = false;
+                            view.tab_strip.drag_autoscroll_animating = false;
                             return false;
                         }
                         true
@@ -98,76 +80,61 @@ impl TerminalView {
         .detach();
     }
 
-    pub(super) fn tab_strip_geometry_for_viewport_width(viewport_width: f32) -> TabStripGeometry {
-        let row_start_x = Self::titlebar_left_padding_for_platform();
-        let row_width = (viewport_width - row_start_x - TOP_STRIP_SIDE_PADDING).max(0.0);
-        let action_rail_width = TABBAR_ACTION_RAIL_WIDTH.min(row_width);
-        let tabs_viewport_width = (row_width - action_rail_width).max(0.0);
-        let action_rail_start_x = row_start_x + tabs_viewport_width;
-        let button_start_x =
-            action_rail_start_x + ((action_rail_width - TABBAR_NEW_TAB_BUTTON_SIZE) * 0.5).max(0.0);
-        let button_start_y = TOP_STRIP_CONTENT_OFFSET_Y
-            + ((TABBAR_HEIGHT - TABBAR_NEW_TAB_BUTTON_SIZE) * 0.5).max(0.0);
-
-        TabStripGeometry {
-            row_start_x,
-            row_width,
-            tabs_viewport_width,
-            action_rail_start_x,
-            action_rail_width,
-            button_start_x,
-            button_end_x: button_start_x + TABBAR_NEW_TAB_BUTTON_SIZE,
-            button_start_y,
-            button_end_y: button_start_y + TABBAR_NEW_TAB_BUTTON_SIZE,
-        }
-    }
-
-    pub(super) fn tab_strip_geometry(&self, window: &Window) -> TabStripGeometry {
-        let viewport_width: f32 = window.viewport_size().width.into();
-        Self::tab_strip_geometry_for_viewport_width(viewport_width)
-    }
-
-    fn tab_strip_pointer_x_from_window_x_for_geometry(
-        window_x: f32,
-        geometry: TabStripGeometry,
-    ) -> f32 {
-        (window_x - geometry.row_start_x).clamp(0.0, geometry.tabs_viewport_width)
-    }
-
-    pub(super) fn tab_strip_pointer_x_from_window_x(
-        &self,
-        window: &Window,
-        window_x: Pixels,
-    ) -> (f32, f32) {
-        let geometry = self.tab_strip_geometry(window);
-        let pointer_x =
-            Self::tab_strip_pointer_x_from_window_x_for_geometry(window_x.into(), geometry);
-        (pointer_x, geometry.tabs_viewport_width)
-    }
-
     fn tab_strip_overflow_state_for_scroll(
         scroll_x: f32,
         max_scroll_x: f32,
     ) -> TabStripOverflowState {
-        const OVERFLOW_EPSILON: f32 = 0.5;
-
         let max_scroll = max_scroll_x.max(0.0);
-        if max_scroll <= OVERFLOW_EPSILON {
+        if max_scroll <= TAB_STRIP_SCROLL_EPSILON {
             return TabStripOverflowState::default();
         }
 
         let clamped_scroll = scroll_x.clamp(0.0, max_scroll);
         TabStripOverflowState {
-            left: clamped_scroll > OVERFLOW_EPSILON,
-            right: (max_scroll - clamped_scroll) > OVERFLOW_EPSILON,
+            left: clamped_scroll > TAB_STRIP_SCROLL_EPSILON,
+            right: (max_scroll - clamped_scroll) > TAB_STRIP_SCROLL_EPSILON,
         }
     }
 
     pub(super) fn tab_strip_overflow_state(&self) -> TabStripOverflowState {
-        let offset = self.tab_strip_scroll_handle.offset();
+        let offset = self.tab_strip.scroll_handle.offset();
         let scroll_x = -Into::<f32>::into(offset.x);
-        let max_scroll: f32 = self.tab_strip_scroll_handle.max_offset().width.into();
+        let max_scroll = self.tab_strip_scroll_max_x();
         Self::tab_strip_overflow_state_for_scroll(scroll_x, max_scroll)
+    }
+
+    fn tab_strip_offset_x_for_delta(
+        current_offset_x: f32,
+        delta_x: f32,
+        max_scroll: f32,
+    ) -> Option<f32> {
+        if delta_x.abs() <= f32::EPSILON {
+            return None;
+        }
+
+        let bounded_max = max_scroll.max(0.0);
+        if bounded_max <= TAB_STRIP_SCROLL_EPSILON {
+            return None;
+        }
+
+        let clamped_current = current_offset_x.clamp(-bounded_max, 0.0);
+        let next_offset = (clamped_current + delta_x).clamp(-bounded_max, 0.0);
+        ((next_offset - clamped_current).abs() > f32::EPSILON).then_some(next_offset)
+    }
+
+    pub(super) fn scroll_tab_strip_by(&mut self, delta_x: f32) -> bool {
+        let max_scroll = self.tab_strip_scroll_max_x();
+        let offset = self.tab_strip.scroll_handle.offset();
+        let current_offset_x: f32 = offset.x.into();
+        let Some(next_offset_x) =
+            Self::tab_strip_offset_x_for_delta(current_offset_x, delta_x, max_scroll)
+        else {
+            return false;
+        };
+
+        self.tab_strip.scroll_handle
+            .set_offset(point(px(next_offset_x), offset.y));
+        true
     }
 
     pub(super) fn effective_tab_max_width_for_viewport(
@@ -219,7 +186,7 @@ impl TerminalView {
     }
 
     fn bump_tab_layout_revision(&mut self) {
-        self.tab_layout_revision = self.tab_layout_revision.wrapping_add(1);
+        self.tab_strip.layout_revision = self.tab_strip.layout_revision.wrapping_add(1);
     }
 
     pub(super) fn sync_tab_display_widths_for_viewport_if_needed(
@@ -228,15 +195,15 @@ impl TerminalView {
     ) -> bool {
         let clamped_viewport = viewport_width.max(0.0);
         let viewport_unchanged =
-            (self.tab_layout_last_synced_viewport_width - clamped_viewport).abs() <= f32::EPSILON;
-        let revision_unchanged = self.tab_layout_last_synced_revision == self.tab_layout_revision;
+            (self.tab_strip.layout_last_synced_viewport_width - clamped_viewport).abs() <= f32::EPSILON;
+        let revision_unchanged = self.tab_strip.layout_last_synced_revision == self.tab_strip.layout_revision;
         if viewport_unchanged && revision_unchanged {
             return false;
         }
 
         let changed = self.sync_tab_display_widths_for_viewport(clamped_viewport);
-        self.tab_layout_last_synced_viewport_width = clamped_viewport;
-        self.tab_layout_last_synced_revision = self.tab_layout_revision;
+        self.tab_strip.layout_last_synced_viewport_width = clamped_viewport;
+        self.tab_strip.layout_last_synced_revision = self.tab_strip.layout_revision;
         changed
     }
 
@@ -269,7 +236,7 @@ impl TerminalView {
     pub(super) fn begin_tab_drag(&mut self, index: usize) {
         if index < self.tabs.len() {
             self.clear_tab_drag_preview_state();
-            self.tab_drag = Some(TabDragState {
+            self.tab_strip.drag = Some(TabDragState {
                 source_index: index,
                 drop_slot: None,
             });
@@ -278,11 +245,12 @@ impl TerminalView {
 
     pub(super) fn finish_tab_drag(&mut self) -> bool {
         let marker_was_visible = self
-            .tab_drag
+            .tab_strip
+            .drag
             .as_ref()
             .and_then(|drag| drag.drop_slot)
             .is_some();
-        self.tab_drag = None;
+        self.tab_strip.drag = None;
         self.clear_tab_drag_preview_state();
         marker_was_visible
     }
@@ -309,7 +277,7 @@ impl TerminalView {
     }
 
     fn tab_drop_slot_from_pointer_x(&self, pointer_x: f32) -> usize {
-        let scroll_offset_x: f32 = self.tab_strip_scroll_handle.offset().x.into();
+        let scroll_offset_x: f32 = self.tab_strip.scroll_handle.offset().x.into();
         Self::tab_drop_slot_from_pointer_x_for_widths(
             self.tabs.iter().map(|tab| tab.display_width),
             pointer_x,
@@ -347,19 +315,19 @@ impl TerminalView {
             return None;
         }
 
-        let drop_slot = self.tab_drag.and_then(|drag| drag.drop_slot)?;
+        let drop_slot = self.tab_strip.drag.and_then(|drag| drag.drop_slot)?;
         Self::tab_drop_marker_side_for_slot(index, drop_slot)
     }
 
     fn update_tab_drag_marker(&mut self, pointer_x: f32, cx: &mut Context<Self>) -> bool {
-        let Some(source_index) = self.tab_drag.map(|drag| drag.source_index) else {
+        let Some(source_index) = self.tab_strip.drag.map(|drag| drag.source_index) else {
             return false;
         };
 
         let raw_drop_slot = self.tab_drop_slot_from_pointer_x(pointer_x);
         let next_drop_slot = Self::normalized_drop_slot(source_index, raw_drop_slot);
 
-        let Some(drag) = self.tab_drag.as_mut() else {
+        let Some(drag) = self.tab_strip.drag.as_mut() else {
             return false;
         };
         if drag.drop_slot == next_drop_slot {
@@ -372,12 +340,7 @@ impl TerminalView {
     }
 
     fn auto_scroll_tab_strip_during_drag(&mut self, pointer_x: f32, viewport_width: f32) -> bool {
-        if self.tab_drag.is_none() || viewport_width <= f32::EPSILON {
-            return false;
-        }
-
-        let max_scroll: f32 = self.tab_strip_scroll_handle.max_offset().width.into();
-        if max_scroll <= f32::EPSILON {
+        if self.tab_strip.drag.is_none() || viewport_width <= f32::EPSILON {
             return false;
         }
 
@@ -388,20 +351,7 @@ impl TerminalView {
         let right_start = (viewport_width - edge).max(0.0);
         let right_strength = ((pointer_x - right_start) / edge).clamp(0.0, 1.0);
         let delta = (right_strength - left_strength) * TAB_DRAG_AUTOSCROLL_MAX_STEP;
-        if delta.abs() <= f32::EPSILON {
-            return false;
-        }
-
-        let offset = self.tab_strip_scroll_handle.offset();
-        let current_scroll = -Into::<f32>::into(offset.x);
-        let next_scroll = (current_scroll + delta).clamp(0.0, max_scroll);
-        if (next_scroll - current_scroll).abs() <= f32::EPSILON {
-            return false;
-        }
-
-        self.tab_strip_scroll_handle
-            .set_offset(point(px(-next_scroll), offset.y));
-        true
+        self.scroll_tab_strip_by(-delta)
     }
 
     pub(super) fn update_tab_drag_preview(
@@ -410,13 +360,13 @@ impl TerminalView {
         viewport_width: f32,
         cx: &mut Context<Self>,
     ) -> bool {
-        if self.tab_drag.is_none() {
+        if self.tab_strip.drag.is_none() {
             return false;
         }
-        self.tab_drag_pointer_x = Some(pointer_x);
-        self.tab_drag_viewport_width = viewport_width.max(0.0);
+        self.tab_strip.drag_pointer_x = Some(pointer_x);
+        self.tab_strip.drag_viewport_width = viewport_width.max(0.0);
         let widths_changed =
-            self.sync_tab_display_widths_for_viewport_if_needed(self.tab_drag_viewport_width);
+            self.sync_tab_display_widths_for_viewport_if_needed(self.tab_strip.drag_viewport_width);
 
         let scrolled = self.auto_scroll_tab_strip_during_drag(pointer_x, viewport_width);
         let marker_changed = self.update_tab_drag_marker(pointer_x, cx);
@@ -429,13 +379,13 @@ impl TerminalView {
         if scrolled {
             self.ensure_tab_drag_autoscroll_animation(cx);
         } else {
-            self.tab_drag_autoscroll_animating = false;
+            self.tab_strip.drag_autoscroll_animating = false;
         }
         scrolled || marker_changed || widths_changed
     }
 
     pub(super) fn commit_tab_drag(&mut self, cx: &mut Context<Self>) {
-        let drag = self.tab_drag.take();
+        let drag = self.tab_strip.drag.take();
         self.clear_tab_drag_preview_state();
         let Some(TabDragState {
             source_index,
@@ -472,10 +422,12 @@ impl TerminalView {
         self.renaming_tab = self
             .renaming_tab
             .map(|index| Self::remap_index_after_move(index, from, to));
-        self.hovered_tab = self
+        self.tab_strip.hovered_tab = self
+            .tab_strip
             .hovered_tab
             .map(|index| Self::remap_index_after_move(index, from, to));
-        self.hovered_tab_close = self
+        self.tab_strip.hovered_tab_close = self
+            .tab_strip
             .hovered_tab_close
             .map(|index| Self::remap_index_after_move(index, from, to));
 
@@ -508,8 +460,8 @@ impl TerminalView {
         self.renaming_tab = None;
         self.rename_input.clear();
         self.inline_input_selecting = false;
-        self.hovered_tab = None;
-        self.hovered_tab_close = None;
+        self.tab_strip.hovered_tab = None;
+        self.tab_strip.hovered_tab_close = None;
         self.finish_tab_drag();
         self.clear_selection();
         self.scroll_active_tab_into_view();
@@ -542,12 +494,12 @@ impl TerminalView {
             _ => {}
         }
 
-        self.hovered_tab = match self.hovered_tab {
+        self.tab_strip.hovered_tab = match self.tab_strip.hovered_tab {
             Some(hovered) if hovered == index => None,
             Some(hovered) if hovered > index => Some(hovered - 1),
             value => value,
         };
-        self.hovered_tab_close = match self.hovered_tab_close {
+        self.tab_strip.hovered_tab_close = match self.tab_strip.hovered_tab_close {
             Some(hovered) if hovered == index => None,
             Some(hovered) if hovered > index => Some(hovered - 1),
             value => value,
@@ -895,11 +847,36 @@ mod tests {
     }
 
     #[test]
+    fn tab_strip_offset_x_for_delta_clamps_to_left_limit() {
+        assert_eq!(
+            TerminalView::tab_strip_offset_x_for_delta(-24.0, 96.0, 120.0),
+            Some(0.0)
+        );
+    }
+
+    #[test]
+    fn tab_strip_offset_x_for_delta_clamps_to_right_limit() {
+        assert_eq!(
+            TerminalView::tab_strip_offset_x_for_delta(-96.0, -64.0, 120.0),
+            Some(-120.0)
+        );
+    }
+
+    #[test]
+    fn tab_strip_offset_x_for_delta_is_noop_without_scroll_range() {
+        assert_eq!(
+            TerminalView::tab_strip_offset_x_for_delta(0.0, 24.0, 0.0),
+            None
+        );
+    }
+
+    #[test]
     fn tab_strip_geometry_positions_action_rail_and_button_bounds() {
         let geometry = TerminalView::tab_strip_geometry_for_viewport_width(1280.0);
         assert!(geometry.row_start_x > 0.0);
         assert!(geometry.tabs_viewport_width > 0.0);
-        assert_float_eq(geometry.tabs_viewport_end_x(), geometry.action_rail_start_x);
+        assert_float_eq(geometry.tabs_viewport_end_x(), geometry.gutter_start_x);
+        assert_float_eq(geometry.gutter_end_x(), geometry.action_rail_start_x);
         assert_float_eq(
             geometry.action_rail_end_x(),
             geometry.action_rail_start_x + geometry.action_rail_width,
@@ -907,6 +884,29 @@ mod tests {
         assert!(geometry.button_start_x >= geometry.action_rail_start_x);
         assert!(geometry.button_end_x <= geometry.action_rail_end_x());
         assert!(geometry.button_start_y >= TOP_STRIP_CONTENT_OFFSET_Y);
+    }
+
+    #[test]
+    fn tab_strip_geometry_clamps_action_rail_for_narrow_viewport() {
+        let viewport_width =
+            TerminalView::titlebar_left_padding_for_platform() + TOP_STRIP_SIDE_PADDING + 24.0;
+        let geometry = TerminalView::tab_strip_geometry_for_viewport_width(viewport_width);
+
+        assert_float_eq(geometry.row_width, 24.0);
+        assert_float_eq(geometry.action_rail_width, 24.0);
+        assert_float_eq(geometry.tabs_viewport_width, 0.0);
+        assert!(geometry.button_start_x >= geometry.action_rail_start_x);
+        assert!(geometry.button_end_x <= geometry.action_rail_end_x());
+    }
+
+    #[test]
+    fn tab_strip_geometry_uses_half_open_bounds_between_regions() {
+        let geometry = TerminalView::tab_strip_geometry_for_viewport_width(1280.0);
+        let boundary_x = geometry.tabs_viewport_end_x();
+        assert!(!geometry.contains_tabs_viewport_x(boundary_x));
+        assert!(geometry.contains_gutter_x(boundary_x));
+        assert!(geometry.contains_tabs_viewport_x(boundary_x - 1.0));
+        assert!(geometry.contains_action_rail_x(geometry.gutter_end_x()));
     }
 
     #[test]

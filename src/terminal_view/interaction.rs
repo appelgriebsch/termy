@@ -1460,12 +1460,12 @@ impl TerminalView {
         self.focus_handle.focus(window, cx);
         self.reset_cursor_blink_phase();
         let mut changed = false;
-        if event.button == MouseButton::Left && self.tab_drag.is_some() {
+        if event.button == MouseButton::Left && self.tab_strip.drag.is_some() {
             self.commit_tab_drag(cx);
         } else if self.finish_tab_drag() {
             changed = true;
         }
-        if self.hovered_tab.take().is_some() || self.hovered_tab_close.take().is_some() {
+        if self.tab_strip.hovered_tab.take().is_some() || self.tab_strip.hovered_tab_close.take().is_some() {
             changed = true;
         }
         if changed {
@@ -1517,11 +1517,11 @@ impl TerminalView {
         window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        if self.tab_drag.is_some() && !event.dragging() {
+        if self.tab_strip.drag.is_some() && !event.dragging() {
             self.commit_tab_drag(cx);
         }
 
-        if self.hovered_tab.take().is_some() || self.hovered_tab_close.take().is_some() {
+        if self.tab_strip.hovered_tab.take().is_some() || self.tab_strip.hovered_tab_close.take().is_some() {
             cx.notify();
         }
 
@@ -1593,142 +1593,6 @@ impl TerminalView {
         }
         self.clear_hovered_link();
         cx.notify();
-    }
-
-    fn unified_titlebar_tab_shell_hit_test(
-        pointer_x: f32,
-        pointer_y: f32,
-        tab_widths: impl IntoIterator<Item = f32>,
-        scroll_offset_x: f32,
-    ) -> bool {
-        let tab_top = TOP_STRIP_CONTENT_OFFSET_Y + (TABBAR_HEIGHT - TAB_ITEM_HEIGHT);
-        let tab_bottom = TOP_STRIP_CONTENT_OFFSET_Y + TABBAR_HEIGHT;
-        if pointer_y < tab_top || pointer_y > tab_bottom {
-            return false;
-        }
-
-        let mut left = TAB_HORIZONTAL_PADDING + scroll_offset_x;
-        for width in tab_widths {
-            let right = left + width;
-            if pointer_x >= left && pointer_x <= right {
-                return true;
-            }
-            left = right + TAB_ITEM_GAP;
-        }
-
-        false
-    }
-
-    fn unified_titlebar_tab_interactive_hit_test(&self, x: f32, y: f32, window: &Window) -> bool {
-        let geometry = self.tab_strip_geometry(window);
-
-        if geometry.contains_tabs_viewport_x(x) {
-            let pointer_x = (x - geometry.row_start_x).clamp(0.0, geometry.tabs_viewport_width);
-            let scroll_offset_x: f32 = self.tab_strip_scroll_handle.offset().x.into();
-            if Self::unified_titlebar_tab_shell_hit_test(
-                pointer_x,
-                y,
-                self.tabs.iter().map(|tab| tab.display_width),
-                scroll_offset_x,
-            ) {
-                return true;
-            }
-        }
-
-        if !geometry.contains_action_rail_x(x) {
-            return false;
-        }
-
-        geometry.new_tab_button_contains(x, y)
-    }
-
-    fn arm_titlebar_window_move(&mut self) {
-        self.titlebar_move_armed = true;
-    }
-
-    pub(super) fn disarm_titlebar_window_move(&mut self) {
-        self.titlebar_move_armed = false;
-    }
-
-    fn titlebar_move_armed_after_mouse_down(interactive_hit: bool, click_count: usize) -> bool {
-        !interactive_hit && click_count != 2
-    }
-
-    fn titlebar_move_armed_after_mouse_up() -> bool {
-        false
-    }
-
-    pub(super) fn handle_unified_titlebar_mouse_down(
-        &mut self,
-        event: &MouseDownEvent,
-        window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if event.button != MouseButton::Left {
-            return;
-        }
-
-        let x: f32 = event.position.x.into();
-        let y: f32 = event.position.y.into();
-        let interactive_hit = self.unified_titlebar_tab_interactive_hit_test(x, y, window);
-        let next_move_armed =
-            Self::titlebar_move_armed_after_mouse_down(interactive_hit, event.click_count);
-        if !next_move_armed {
-            self.disarm_titlebar_window_move();
-        }
-        if !interactive_hit && event.click_count == 2 {
-            #[cfg(target_os = "macos")]
-            window.titlebar_double_click();
-            #[cfg(not(target_os = "macos"))]
-            window.zoom_window();
-            cx.stop_propagation();
-            return;
-        }
-
-        if next_move_armed {
-            self.arm_titlebar_window_move();
-            cx.stop_propagation();
-        }
-    }
-
-    pub(super) fn handle_unified_titlebar_mouse_up(
-        &mut self,
-        event: &MouseUpEvent,
-        _window: &mut Window,
-        cx: &mut Context<Self>,
-    ) {
-        if event.button != MouseButton::Left {
-            return;
-        }
-
-        self.titlebar_move_armed = Self::titlebar_move_armed_after_mouse_up();
-        cx.stop_propagation();
-    }
-
-    pub(super) fn maybe_start_titlebar_window_move(
-        &mut self,
-        dragging: bool,
-        window: &mut Window,
-    ) -> bool {
-        if !Self::should_start_titlebar_window_move(
-            self.titlebar_move_armed,
-            dragging,
-            self.tab_drag.is_some(),
-        ) {
-            return false;
-        }
-
-        self.disarm_titlebar_window_move();
-        window.start_window_move();
-        true
-    }
-
-    fn should_start_titlebar_window_move(
-        titlebar_move_armed: bool,
-        dragging: bool,
-        tab_drag_active: bool,
-    ) -> bool {
-        titlebar_move_armed && dragging && !tab_drag_active
     }
 
     pub(super) fn handle_terminal_scroll_wheel(
@@ -1937,4 +1801,53 @@ mod tests {
             scroll_offset_x
         ));
     }
+
+    #[test]
+    fn tab_strip_scroll_delta_prefers_horizontal_axis() {
+        assert_eq!(
+            TerminalView::tab_strip_scroll_delta_from_pixels(48.0, 12.0),
+            -48.0
+        );
+    }
+
+    #[test]
+    fn tab_strip_scroll_delta_prefers_vertical_axis_when_dominant() {
+        assert_eq!(
+            TerminalView::tab_strip_scroll_delta_from_pixels(12.0, 48.0),
+            -48.0
+        );
+    }
+
+    #[test]
+    fn tab_strip_scroll_delta_preserves_small_non_zero_trackpad_deltas() {
+        assert_eq!(
+            TerminalView::tab_strip_scroll_delta_from_pixels(0.2, -0.4),
+            0.4
+        );
+    }
+
+    #[test]
+    fn tab_strip_scroll_delta_returns_zero_only_for_zero_input() {
+        assert_eq!(
+            TerminalView::tab_strip_scroll_delta_from_pixels(0.0, 0.0),
+            0.0
+        );
+    }
+
+    #[test]
+    fn tab_strip_scroll_delta_falls_back_to_vertical_axis_for_zero_horizontal() {
+        assert_eq!(
+            TerminalView::tab_strip_scroll_delta_from_pixels(0.0, -30.0),
+            30.0
+        );
+    }
+
+    #[test]
+    fn tab_strip_scroll_delta_falls_back_to_horizontal_axis_for_zero_vertical() {
+        assert_eq!(
+            TerminalView::tab_strip_scroll_delta_from_pixels(12.0, 0.0),
+            -12.0
+        );
+    }
+
 }
