@@ -136,9 +136,9 @@ pub(super) fn compute_tab_chrome_layout(
         cursor_x = span.right_exclusive + tab_item_gap;
     }
 
-    let content_width = spans.last().map_or(horizontal_padding * 2.0, |span| {
-        snap_px(span.right_exclusive + horizontal_padding)
-    });
+    let content_width = spans
+        .last()
+        .map_or(horizontal_padding, |span| snap_px(span.right_exclusive));
 
     let active_span = input
         .active_index
@@ -383,7 +383,7 @@ mod tests {
     }
 
     #[test]
-    fn active_last_has_correct_right_boundary_and_gap() {
+    fn active_last_has_correct_right_boundary_and_no_trailing_gap() {
         let layout = layout_for(&[100.0, 100.0], Some(1));
         let full_height = layout.baseline_y - (layout.tab_top_y + TAB_STROKE_THICKNESS) + 1.0;
         let short_height = full_height - TAB_STROKE_THICKNESS;
@@ -400,22 +400,18 @@ mod tests {
         assert!(baseline_pixels.contains(&107));
         assert!(!baseline_pixels.contains(&108));
         assert!(!baseline_pixels.contains(&207));
-        assert!(baseline_pixels.contains(&208));
+        assert!(!baseline_pixels.contains(&208));
     }
 
     #[test]
-    fn single_tab_gap_and_outer_edges_are_correct() {
+    fn single_tab_has_only_leading_baseline_padding() {
         let layout = layout_for(&[100.0], Some(0));
         assert_eq!(layout.boundary_strokes.len(), 2);
         assert_eq!(boundary_at_x(&layout, 8).h, boundary_at_x(&layout, 107).h);
-        assert_eq!(layout.baseline_strokes.len(), 2);
+        assert_eq!(layout.baseline_strokes.len(), 1);
         assert_eq!(
             layout.baseline_strokes[0],
             StrokeRect::new(0.0, 33.0, 8.0, 1.0)
-        );
-        assert_eq!(
-            layout.baseline_strokes[1],
-            StrokeRect::new(108.0, 33.0, 8.0, 1.0)
         );
     }
 

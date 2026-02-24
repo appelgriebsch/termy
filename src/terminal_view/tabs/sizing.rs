@@ -4,7 +4,7 @@ impl TerminalView {
     pub(crate) fn tab_strip_fixed_content_width(&self) -> f32 {
         let tabs_width: f32 = self.tabs.iter().map(|tab| tab.display_width).sum();
         let gaps = TAB_ITEM_GAP * self.tabs.len().saturating_sub(1) as f32;
-        TAB_HORIZONTAL_PADDING + tabs_width + gaps + TAB_HORIZONTAL_PADDING
+        TAB_HORIZONTAL_PADDING + tabs_width + gaps
     }
 
     pub(crate) fn tab_strip_expected_max_scroll_for_viewport(&self, viewport_width: f32) -> f32 {

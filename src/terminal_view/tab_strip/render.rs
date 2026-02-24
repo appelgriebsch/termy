@@ -26,6 +26,51 @@ struct TabStripPalette {
     tab_overflow_fade_strong: gpui::Rgba,
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gutter_divider_shows_without_overflow() {
+        assert!(TerminalView::should_render_gutter_divider(
+            TabStripOverflowState {
+                left: false,
+                right: false,
+            }
+        ));
+    }
+
+    #[test]
+    fn gutter_divider_shows_when_only_right_overflow_exists() {
+        assert!(TerminalView::should_render_gutter_divider(
+            TabStripOverflowState {
+                left: false,
+                right: true,
+            }
+        ));
+    }
+
+    #[test]
+    fn gutter_divider_shows_when_overflow_exists_on_both_sides() {
+        assert!(TerminalView::should_render_gutter_divider(
+            TabStripOverflowState {
+                left: true,
+                right: true,
+            }
+        ));
+    }
+
+    #[test]
+    fn gutter_divider_hides_at_true_max_right_scroll() {
+        assert!(!TerminalView::should_render_gutter_divider(
+            TabStripOverflowState {
+                left: true,
+                right: false,
+            }
+        ));
+    }
+}
+
 struct TabStripRenderState {
     geometry: TabStripGeometry,
     content_width: f32,
@@ -339,6 +384,7 @@ impl TerminalView {
         gutter_width: f32,
         tab_baseline_y: f32,
         tab_stroke_color: gpui::Rgba,
+        show_divider: bool,
     ) -> AnyElement {
         div()
             .id("tabbar-action-gutter")
@@ -355,16 +401,20 @@ impl TerminalView {
                     .h(px(TAB_STROKE_THICKNESS))
                     .bg(tab_stroke_color),
             )
-            .child(
+            .children(show_divider.then(|| {
                 div()
                     .absolute()
                     .left(px(((gutter_width - TAB_STROKE_THICKNESS) * 0.5).max(0.0)))
                     .top(px(TAB_STROKE_THICKNESS))
                     .bottom_0()
                     .w(px(TAB_STROKE_THICKNESS))
-                    .bg(tab_stroke_color),
-            )
+                    .bg(tab_stroke_color)
+            }))
             .into_any_element()
+    }
+
+    fn should_render_gutter_divider(overflow: TabStripOverflowState) -> bool {
+        overflow.right || !overflow.left
     }
 
     fn render_baseline_segments(
@@ -646,14 +696,6 @@ impl TerminalView {
             tabs_scroll_content = tabs_scroll_content.child(tab_item);
         }
 
-        tabs_scroll_content = tabs_scroll_content.child(
-            div()
-                .id("tabs-right-padding-spacer")
-                .flex_none()
-                .w(px(TAB_HORIZONTAL_PADDING))
-                .h(px(TABBAR_HEIGHT)),
-        );
-
         for element in Self::render_baseline_segments(&state.chrome_layout, palette.tab_stroke_color) {
             tabs_scroll_content = tabs_scroll_content.child(element);
         }
@@ -813,6 +855,7 @@ impl TerminalView {
                 palette.tab_overflow_fade_strong,
             )
         });
+        let show_gutter_divider = Self::should_render_gutter_divider(state.overflow_state);
 
         div()
             .w_full()
@@ -857,6 +900,7 @@ impl TerminalView {
                     state.geometry.gutter_width,
                     state.chrome_layout.baseline_y,
                     palette.tab_stroke_color,
+                    show_gutter_divider,
                 )
             }))
             .children((state.geometry.action_rail_width > 0.0).then(|| {
