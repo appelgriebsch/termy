@@ -141,7 +141,8 @@ pub fn validate_contents(contents: &str) -> ValidationReport {
 
         // Parse key = value
         if let Some((key, value)) = trimmed.split_once('=') {
-            let key = key.trim();
+            let key_original = key.trim();
+            let key_normalized = key_original.to_ascii_lowercase();
             let value = value.trim();
 
             // Inside a section, allow any keys
@@ -150,13 +151,13 @@ pub fn validate_contents(contents: &str) -> ValidationReport {
             }
 
             // Check if key is valid
-            if !VALID_ROOT_KEYS.contains(&key) {
-                warnings.push(format!("Line {}: Unknown key '{}'", line_num, key));
+            if !VALID_ROOT_KEYS.contains(&key_normalized.as_str()) {
+                warnings.push(format!("Line {}: Unknown key '{}'", line_num, key_original));
                 continue;
             }
 
             // Validate specific keys
-            match key {
+            match key_normalized.as_str() {
                 "theme" => {
                     if !VALID_THEMES.contains(&value) {
                         warnings.push(format!(
@@ -222,7 +223,7 @@ pub fn validate_contents(contents: &str) -> ValidationReport {
                     if !["true", "false"].contains(&value.to_lowercase().as_str()) {
                         errors.push(format!(
                             "Line {}: {} must be 'true' or 'false'",
-                            line_num, key
+                            line_num, key_original
                         ));
                     }
                 }
@@ -230,7 +231,7 @@ pub fn validate_contents(contents: &str) -> ValidationReport {
                     if value.parse::<usize>().is_err() {
                         errors.push(format!(
                             "Line {}: {} must be a positive integer",
-                            line_num, key
+                            line_num, key_original
                         ));
                     }
                 }
@@ -245,4 +246,38 @@ pub fn validate_contents(contents: &str) -> ValidationReport {
     }
 
     ValidationReport { errors, warnings }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::validate_contents;
+
+    #[test]
+    fn mixed_case_root_keys_are_validated_case_insensitively() {
+        let report = validate_contents(
+            "Theme = termy\n\
+             FoNt_SiZe = 13\n\
+             CuRsOr_BlInK = true\n",
+        );
+
+        assert!(
+            report.errors.is_empty(),
+            "unexpected errors: {:?}",
+            report.errors
+        );
+        assert!(
+            report.warnings.is_empty(),
+            "unexpected warnings: {:?}",
+            report.warnings
+        );
+    }
+
+    #[test]
+    fn mixed_case_theme_key_still_uses_theme_validation() {
+        let report = validate_contents("THEME = unknown-theme\n");
+
+        assert!(report.errors.is_empty());
+        assert_eq!(report.warnings.len(), 1);
+        assert!(report.warnings[0].contains("Unknown theme"));
+    }
 }

@@ -1,23 +1,88 @@
-use std::{collections::HashMap, fs, path::Path};
+use std::{
+    collections::HashMap,
+    fs,
+    io::Read,
+    path::Path,
+    sync::{LazyLock, Mutex},
+};
 
+use fs2::FileExt;
 use termy_config_core::{Rgb8, canonical_color_key, parse_theme_id};
 
 use super::ConfigIoError;
 use super::io::{ensure_config_file, notify_config_changed, write_atomic};
 
+static CONFIG_UPDATE_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
+
 fn update_config_contents<R>(
     updater: impl FnOnce(&str) -> Result<(String, R), String>,
 ) -> Result<R, String> {
+    let _process_guard = CONFIG_UPDATE_LOCK
+        .lock()
+        .map_err(|_| "Failed to acquire config update lock".to_string())?;
     let config_path = ensure_config_file().map_err(|error| error.to_string())?;
-    let existing = fs::read_to_string(&config_path)
+    let lock_path = config_path.with_extension("lock");
+    let lock_path_display = lock_path.display().to_string();
+    let process_lock_file = fs::OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .open(&lock_path)
+        .map_err(|source| {
+            format!(
+                "Failed to open config lock file '{}': {}",
+                lock_path_display, source
+            )
+        })?;
+    process_lock_file.lock_exclusive().map_err(|source| {
+        format!(
+            "Failed to lock config lock file '{}': {}",
+            lock_path_display, source
+        )
+    })?;
+
+    let mut config_lock_file = fs::OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&config_path)
         .map_err(|source| ConfigIoError::ReadConfig {
             path: config_path.clone(),
             source,
         })
         .map_err(|error| error.to_string())?;
+    config_lock_file.lock_exclusive().map_err(|source| {
+        format!(
+            "Failed to lock config file '{}': {}",
+            config_path.display(),
+            source
+        )
+    })?;
+
+    let mut existing = String::new();
+    config_lock_file
+        .read_to_string(&mut existing)
+        .map_err(|source| ConfigIoError::ReadConfig {
+            path: config_path.clone(),
+            source,
+        })
+        .map_err(|error| error.to_string())?;
+
     let (updated, result) = updater(&existing)?;
     write_atomic(&config_path, &updated).map_err(|error| error.to_string())?;
     notify_config_changed();
+    config_lock_file.unlock().map_err(|source| {
+        format!(
+            "Failed to unlock config file '{}': {}",
+            config_path.display(),
+            source
+        )
+    })?;
+    process_lock_file.unlock().map_err(|source| {
+        format!(
+            "Failed to unlock config lock file '{}': {}",
+            lock_path_display, source
+        )
+    })?;
     Ok(result)
 }
 
@@ -193,6 +258,7 @@ pub fn set_config_value(key: &str, value: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::OsString;
     use std::path::Path;
     use std::sync::{LazyLock, Mutex};
 
@@ -200,20 +266,46 @@ mod tests {
 
     static ENV_LOCK: LazyLock<Mutex<()>> = LazyLock::new(|| Mutex::new(()));
 
+    struct XdgConfigHomeGuard {
+        previous_xdg: Option<OsString>,
+    }
+
+    impl XdgConfigHomeGuard {
+        fn set(xdg_home: &Path) -> Self {
+            let previous_xdg = std::env::var_os("XDG_CONFIG_HOME");
+            unsafe { std::env::set_var("XDG_CONFIG_HOME", xdg_home) };
+            Self { previous_xdg }
+        }
+    }
+
+    impl Drop for XdgConfigHomeGuard {
+        fn drop(&mut self) {
+            if let Some(previous) = self.previous_xdg.take() {
+                unsafe { std::env::set_var("XDG_CONFIG_HOME", previous) };
+            } else {
+                unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
+            }
+        }
+    }
+
     fn with_temp_xdg_config_home(test: impl FnOnce(&Path)) {
         let _guard = ENV_LOCK.lock().expect("env lock");
         let temp_dir = tempfile::tempdir().expect("tempdir");
         let xdg_home = temp_dir.path().join("xdg");
         std::fs::create_dir_all(&xdg_home).expect("create xdg home");
 
-        let previous_xdg = std::env::var_os("XDG_CONFIG_HOME");
-        unsafe { std::env::set_var("XDG_CONFIG_HOME", &xdg_home) };
+        let _restore_guard = XdgConfigHomeGuard::set(&xdg_home);
         test(temp_dir.path());
-        if let Some(previous) = previous_xdg {
-            unsafe { std::env::set_var("XDG_CONFIG_HOME", previous) };
-        } else {
-            unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
-        }
+    }
+
+    #[test]
+    fn with_temp_xdg_config_home_restores_environment_after_panic() {
+        let before = std::env::var_os("XDG_CONFIG_HOME");
+        let result = std::panic::catch_unwind(|| {
+            with_temp_xdg_config_home(|_| panic!("intentional panic"));
+        });
+        assert!(result.is_err());
+        assert_eq!(std::env::var_os("XDG_CONFIG_HOME"), before);
     }
 
     #[test]

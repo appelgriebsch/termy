@@ -386,7 +386,17 @@ impl AppConfig {
                         value,
                         "a number between 0.0 and 1.0",
                     ) {
-                        config.background_opacity = parsed.clamp(0.0, 1.0);
+                        if parsed.is_finite() {
+                            config.background_opacity = parsed.clamp(0.0, 1.0);
+                        } else {
+                            push_invalid_value(
+                                &mut diagnostics,
+                                line_number,
+                                key,
+                                value,
+                                "a number between 0.0 and 1.0",
+                            );
+                        }
                     }
                 }
                 RootKey::BackgroundBlur => {

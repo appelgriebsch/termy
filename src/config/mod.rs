@@ -23,6 +23,7 @@ pub struct LoadedConfig {
     pub path: PathBuf,
     pub config: AppConfig,
     pub diagnostics: Vec<ConfigDiagnostic>,
+    pub fingerprint: u64,
 }
 
 pub struct RuntimeConfigLoad {
@@ -39,12 +40,14 @@ fn load_from_path(path: PathBuf) -> Result<LoadedConfig, ConfigIoError> {
         path: path.clone(),
         source,
     })?;
+    let fingerprint = config_fingerprint_from_bytes(contents.as_bytes());
     let report = AppConfig::from_contents_with_report(&contents);
 
     Ok(LoadedConfig {
         path,
         config: report.config,
         diagnostics: report.diagnostics,
+        fingerprint,
     })
 }
 
@@ -91,9 +94,13 @@ pub fn show_parse_diagnostics_toast(diagnostics: &[ConfigDiagnostic]) {
 // processes/toolchain versions; use a stable hash algorithm for that.
 pub fn config_fingerprint(path: &Path) -> Option<u64> {
     let contents = fs::read(path).ok()?;
+    Some(config_fingerprint_from_bytes(&contents))
+}
+
+fn config_fingerprint_from_bytes(contents: &[u8]) -> u64 {
     let mut hasher = DefaultHasher::new();
     contents.hash(&mut hasher);
-    Some(hasher.finish())
+    hasher.finish()
 }
 
 pub fn report_config_error_once(
@@ -127,8 +134,6 @@ pub fn load_runtime_config(
             };
         }
     };
-    let fingerprint = config_fingerprint(&path);
-
     match load_from_path(path.clone()) {
         Ok(loaded) => {
             log_parse_diagnostics(&loaded.diagnostics);
@@ -137,7 +142,7 @@ pub fn load_runtime_config(
             RuntimeConfigLoad {
                 config: loaded.config,
                 path: Some(loaded.path),
-                fingerprint,
+                fingerprint: Some(loaded.fingerprint),
                 loaded_from_disk: true,
             }
         }
@@ -146,7 +151,7 @@ pub fn load_runtime_config(
             RuntimeConfigLoad {
                 config: AppConfig::default(),
                 path: Some(path),
-                fingerprint,
+                fingerprint: None,
                 loaded_from_disk: false,
             }
         }
