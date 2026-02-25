@@ -509,7 +509,7 @@ impl Element for TerminalGrid {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gpui::{point, px, Bounds, Size};
+    use gpui::{Bounds, Size, point, px};
 
     #[test]
     fn block_element_geometry_is_complete_for_unicode_range() {
