@@ -82,16 +82,7 @@ pub(super) fn resolve_tab_stroke_color(
     foreground: gpui::Rgba,
     foreground_mix: f32,
 ) -> gpui::Rgba {
-    let mix = foreground_mix.clamp(0.0, 1.0);
-    let inv_mix = 1.0 - mix;
-
-    gpui::Rgba {
-        r: (tabbar_background.r * inv_mix) + (foreground.r * mix),
-        g: (tabbar_background.g * inv_mix) + (foreground.g * mix),
-        b: (tabbar_background.b * inv_mix) + (foreground.b * mix),
-        // Opaque stroke eliminates tab-background-dependent blending drift.
-        a: 1.0,
-    }
+    super::super::resolve_chrome_stroke_color(tabbar_background, foreground, foreground_mix)
 }
 
 pub(super) fn compute_tab_chrome_layout(

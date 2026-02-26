@@ -46,7 +46,7 @@ impl TerminalView {
         }
 
         // Close other overlays
-        if self.command_palette_open {
+        if self.is_command_palette_open() {
             self.close_command_palette(cx);
         }
         if self.renaming_tab.is_some() {

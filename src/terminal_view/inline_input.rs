@@ -862,7 +862,7 @@ impl IntoElement for InlineInputElement {
 
 impl TerminalView {
     fn active_inline_input_target(&self) -> Option<InlineInputTarget> {
-        if self.command_palette_open {
+        if self.is_command_palette_open() {
             Some(InlineInputTarget::CommandPalette)
         } else if self.search_open {
             Some(InlineInputTarget::Search)
@@ -920,7 +920,7 @@ impl TerminalView {
 
     fn active_inline_input_state(&self) -> Option<&InlineInputState> {
         match self.active_inline_input_target()? {
-            InlineInputTarget::CommandPalette => Some(&self.command_palette_input),
+            InlineInputTarget::CommandPalette => Some(&self.command_palette.input),
             InlineInputTarget::Search => Some(&self.search_input),
             InlineInputTarget::RenameTab => Some(&self.rename_input),
         }
@@ -928,14 +928,14 @@ impl TerminalView {
 
     fn active_inline_input_state_mut(&mut self) -> Option<&mut InlineInputState> {
         match self.active_inline_input_target()? {
-            InlineInputTarget::CommandPalette => Some(&mut self.command_palette_input),
+            InlineInputTarget::CommandPalette => Some(&mut self.command_palette.input),
             InlineInputTarget::Search => Some(&mut self.search_input),
             InlineInputTarget::RenameTab => Some(&mut self.rename_input),
         }
     }
 
     pub(super) fn command_palette_query(&self) -> &str {
-        self.command_palette_input.text()
+        self.command_palette.input.text()
     }
 
     pub(super) fn command_palette_query_changed(&mut self, cx: &mut Context<Self>) {
@@ -967,7 +967,7 @@ impl TerminalView {
 
         match self.active_inline_input_target() {
             Some(InlineInputTarget::CommandPalette) => {
-                mutate(&mut self.command_palette_input);
+                mutate(&mut self.command_palette.input);
                 self.command_palette_query_changed(cx);
             }
             Some(InlineInputTarget::Search) => {

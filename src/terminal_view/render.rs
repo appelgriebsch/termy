@@ -409,7 +409,7 @@ impl Render for TerminalView {
         let mut cells_to_render: Vec<CellRenderInfo> = Vec::with_capacity(estimated_cells);
         let (cursor_col, cursor_row) = self.active_terminal().cursor_position();
         let terminal_cursor_active =
-            !self.command_palette_open && self.renaming_tab.is_none() && !self.search_open;
+            !self.is_command_palette_open() && self.renaming_tab.is_none() && !self.search_open;
         let cursor_visible = terminal_cursor_active
             && self.cursor_visible_for_focus(self.focus_handle.is_focused(window));
 
@@ -564,7 +564,7 @@ impl Render for TerminalView {
         } else {
             div().child(terminal_grid).into_any_element()
         };
-        let command_palette_overlay = if self.command_palette_open {
+        let command_palette_overlay = if self.is_command_palette_open() {
             Some(self.render_command_palette_modal(cx))
         } else {
             None

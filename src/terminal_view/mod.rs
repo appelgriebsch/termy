@@ -12,8 +12,8 @@ use gpui::{
     AnyElement, App, AsyncApp, ClipboardItem, Context, Element, ExternalPaths, FocusHandle,
     Focusable, Font, FontWeight, InteractiveElement, IntoElement, KeyDownEvent, MouseButton,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render, ScrollWheelEvent,
-    SharedString, Size, StatefulInteractiveElement, Styled, TouchPhase, UniformListScrollHandle,
-    WeakEntity, Window, WindowBackgroundAppearance, div, point, px,
+    SharedString, Size, StatefulInteractiveElement, Styled, TouchPhase, WeakEntity, Window,
+    WindowBackgroundAppearance, div, point, px,
 };
 use std::{
     env,
@@ -46,6 +46,7 @@ mod titles;
 #[cfg(target_os = "macos")]
 mod update_toasts;
 
+use command_palette::{CommandPaletteMode, CommandPaletteState};
 use inline_input::{InlineInputAlignment, InlineInputState};
 pub(crate) use tab_strip::constants::*;
 use tab_strip::state::TabStripState;
@@ -104,9 +105,7 @@ const OVERLAY_MUTED_TEXT_ALPHA: f32 = 0.62;
 const COMMAND_PALETTE_PANEL_SOLID_ALPHA: f32 = 0.90;
 const COMMAND_PALETTE_INPUT_SOLID_ALPHA: f32 = 0.76;
 const COMMAND_PALETTE_ROW_SELECTED_BG_ALPHA: f32 = 0.20;
-const COMMAND_PALETTE_ROW_SELECTED_BORDER_ALPHA: f32 = 0.35;
 const COMMAND_PALETTE_SHORTCUT_BG_ALPHA: f32 = 0.10;
-const COMMAND_PALETTE_SHORTCUT_BORDER_ALPHA: f32 = 0.22;
 const COMMAND_PALETTE_SHORTCUT_TEXT_ALPHA: f32 = 0.80;
 const COMMAND_PALETTE_DIM_ALPHA: f32 = 0.78;
 const COMMAND_PALETTE_PANEL_BG_ALPHA: f32 = 0.98;
@@ -228,25 +227,6 @@ struct HoveredLink {
     start_col: usize,
     end_col: usize,
     target: String,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum CommandPaletteMode {
-    Commands,
-    Themes,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum CommandPaletteItemKind {
-    Command(CommandAction),
-    Theme(String),
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct CommandPaletteItem {
-    title: String,
-    keywords: String,
-    kind: CommandPaletteItemKind,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -397,6 +377,22 @@ fn blend_rgba(base: gpui::Rgba, tint: gpui::Rgba, tint_factor: f32) -> gpui::Rgb
     }
 }
 
+fn resolve_chrome_stroke_color(
+    chrome_background: gpui::Rgba,
+    foreground: gpui::Rgba,
+    foreground_mix: f32,
+) -> gpui::Rgba {
+    let mix = foreground_mix.clamp(0.0, 1.0);
+    let inv_mix = 1.0 - mix;
+
+    gpui::Rgba {
+        r: (chrome_background.r * inv_mix) + (foreground.r * mix),
+        g: (chrome_background.g * inv_mix) + (foreground.g * mix),
+        b: (chrome_background.b * inv_mix) + (foreground.b * mix),
+        a: 1.0,
+    }
+}
+
 #[derive(Clone, Copy)]
 struct OverlayStyleBuilder<'a> {
     colors: &'a TerminalColors,
@@ -512,18 +508,8 @@ pub struct TerminalView {
     copied_toast_feedback: Option<(u64, Instant)>,
     toast_animation_scheduled: bool,
     toast_manager: ToastManager,
-    command_palette_open: bool,
-    command_palette_mode: CommandPaletteMode,
-    command_palette_input: InlineInputState,
-    command_palette_filtered_items: Vec<CommandPaletteItem>,
-    command_palette_selected: usize,
-    command_palette_scroll_handle: UniformListScrollHandle,
+    command_palette: CommandPaletteState,
     tab_strip: TabStripState,
-    command_palette_scroll_target_y: Option<f32>,
-    command_palette_scroll_max_y: f32,
-    command_palette_scroll_animating: bool,
-    command_palette_scroll_last_tick: Option<Instant>,
-    command_palette_show_keybinds: bool,
     inline_input_selecting: bool,
     terminal_scroll_accumulator_y: f32,
     input_scroll_suppress_until: Option<Instant>,
@@ -1018,18 +1004,8 @@ impl TerminalView {
             copied_toast_feedback: None,
             toast_animation_scheduled: false,
             toast_manager: ToastManager::new(),
-            command_palette_open: false,
-            command_palette_mode: CommandPaletteMode::Commands,
-            command_palette_input: InlineInputState::new(String::new()),
-            command_palette_filtered_items: Vec::new(),
-            command_palette_selected: 0,
-            command_palette_scroll_handle: UniformListScrollHandle::new(),
+            command_palette: CommandPaletteState::new(config.command_palette_show_keybinds),
             tab_strip: TabStripState::new(),
-            command_palette_scroll_target_y: None,
-            command_palette_scroll_max_y: 0.0,
-            command_palette_scroll_animating: false,
-            command_palette_scroll_last_tick: None,
-            command_palette_show_keybinds: config.command_palette_show_keybinds,
             inline_input_selecting: false,
             terminal_scroll_accumulator_y: 0.0,
             input_scroll_suppress_until: None,
@@ -1120,7 +1096,7 @@ impl TerminalView {
             self.clear_terminal_scrollbar_marker_cache();
         }
         self.terminal_scrollbar_style = config.terminal_scrollbar_style;
-        self.command_palette_show_keybinds = config.command_palette_show_keybinds;
+        self.command_palette.show_keybinds = config.command_palette_show_keybinds;
 
         for index in 0..self.tabs.len() {
             self.refresh_tab_title(index);
@@ -1130,7 +1106,7 @@ impl TerminalView {
             self.mark_tab_strip_layout_dirty();
         }
 
-        if self.command_palette_open {
+        if self.command_palette.open {
             self.refresh_command_palette_matches(true, cx);
         }
 

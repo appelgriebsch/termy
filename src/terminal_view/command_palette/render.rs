@@ -1,0 +1,286 @@
+use super::super::*;
+use super::*;
+use super::style::{
+    COMMAND_PALETTE_INPUT_RADIUS, COMMAND_PALETTE_PANEL_RADIUS, COMMAND_PALETTE_ROW_RADIUS,
+    COMMAND_PALETTE_SHORTCUT_RADIUS, CommandPaletteStyle,
+};
+use crate::ui::scrollbar::{self, ScrollbarPaintStyle, ScrollbarRange};
+use gpui::uniform_list;
+use std::ops::Range;
+
+impl TerminalView {
+    fn command_palette_scrollbar_metrics(
+        &self,
+        viewport_height: f32,
+        item_count: usize,
+    ) -> Option<scrollbar::ScrollbarMetrics> {
+        let scroll_handle = self.command_palette.base_scroll_handle();
+        let max_offset_from_handle: f32 = scroll_handle.max_offset().height.into();
+        let estimated_content_height = item_count as f32 * COMMAND_PALETTE_ROW_HEIGHT;
+        let estimated_max_offset = (estimated_content_height - viewport_height).max(0.0);
+        let max_offset = max_offset_from_handle.max(estimated_max_offset);
+        let offset_y: f32 = scroll_handle.offset().y.into();
+        let offset = (-offset_y).max(0.0);
+        let range = ScrollbarRange {
+            offset,
+            max_offset,
+            viewport_extent: viewport_height,
+            track_extent: viewport_height,
+        };
+
+        scrollbar::compute_metrics(range, COMMAND_PALETTE_SCROLLBAR_MIN_THUMB_HEIGHT)
+    }
+
+    fn render_command_palette_rows(
+        &mut self,
+        range: Range<usize>,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) -> Vec<AnyElement> {
+        let items = self.filtered_command_palette_items();
+        let selected = if items.is_empty() {
+            0
+        } else {
+            self.command_palette.selected.min(items.len() - 1)
+        };
+        let style = CommandPaletteStyle::resolve(self);
+        let transparent = self.overlay_style().transparent_background();
+
+        let mut rows = Vec::with_capacity(range.len());
+        for index in range {
+            let Some(item) = items.get(index).cloned() else {
+                continue;
+            };
+
+            let is_selected = index == selected;
+            let shortcut = match item.kind {
+                CommandPaletteItemKind::Command(action) => self.command_palette_shortcut(action, window),
+                CommandPaletteItemKind::Theme(_) => None,
+            };
+            let item_kind = item.kind.clone();
+
+            rows.push(
+                div()
+                    .id(("command-palette-item", index))
+                    .w_full()
+                    .h(px(COMMAND_PALETTE_ROW_HEIGHT))
+                    .px(px(10.0))
+                    .rounded(px(COMMAND_PALETTE_ROW_RADIUS))
+                    .bg(if is_selected { style.selected_bg } else { transparent })
+                    .border_1()
+                    .border_color(if is_selected {
+                        style.selected_border
+                    } else {
+                        transparent
+                    })
+                    .cursor_pointer()
+                    .on_mouse_move(cx.listener(move |this, _event, _window, cx| {
+                        if this.command_palette.selected != index {
+                            this.command_palette.selected = index;
+                            cx.notify();
+                        }
+                    }))
+                    .on_mouse_down(
+                        MouseButton::Left,
+                        cx.listener(move |this, _event, window, cx| {
+                            this.command_palette.selected = index;
+                            this.execute_command_palette_item(item_kind.clone(), window, cx);
+                            cx.stop_propagation();
+                        }),
+                    )
+                    .text_size(px(12.0))
+                    .text_color(style.primary_text)
+                    .child(
+                        div()
+                            .size_full()
+                            .flex()
+                            .items_center()
+                            .justify_between()
+                            .gap(px(8.0))
+                            .child(div().flex_1().truncate().child(item.title.clone()))
+                            .children(shortcut.map(|label| {
+                                div()
+                                    .flex_none()
+                                    .h(px(20.0))
+                                    .px(px(6.0))
+                                    .flex()
+                                    .items_center()
+                                    .justify_center()
+                                    .rounded(px(COMMAND_PALETTE_SHORTCUT_RADIUS))
+                                    .bg(style.shortcut_bg)
+                                    .border_1()
+                                    .border_color(style.shortcut_border)
+                                    .text_size(px(10.0))
+                                    .text_color(style.shortcut_text)
+                                    .child(label)
+                            })),
+                    )
+                    .into_any_element(),
+            );
+        }
+        rows
+    }
+
+    pub(in super::super) fn render_command_palette_modal(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> AnyElement {
+        let items = self.filtered_command_palette_items();
+        let list_height = COMMAND_PALETTE_MAX_ITEMS as f32 * COMMAND_PALETTE_ROW_HEIGHT;
+        let mode_title = match self.command_palette.mode {
+            CommandPaletteMode::Commands => "Commands".to_string(),
+            CommandPaletteMode::Themes => format!("Theme: {}", self.theme_id),
+        };
+        let footer_hint = match self.command_palette.mode {
+            CommandPaletteMode::Commands => "Enter: Run  Esc: Close  Up/Down: Navigate",
+            CommandPaletteMode::Themes => "Enter: Apply Theme  Esc: Back  Up/Down: Navigate",
+        };
+        let style = CommandPaletteStyle::resolve(self);
+        let input_font = Font {
+            family: self.font_family.clone(),
+            ..Font::default()
+        };
+
+        let list = if items.is_empty() {
+            div()
+                .w_full()
+                .child(
+                    div()
+                        .px(px(10.0))
+                        .py(px(8.0))
+                        .text_size(px(12.0))
+                        .text_color(style.muted_text)
+                        .child("No matching items"),
+                )
+                .into_any_element()
+        } else {
+            let list = uniform_list(
+                "command-palette-list",
+                items.len(),
+                cx.processor(Self::render_command_palette_rows),
+            )
+            .flex_1()
+            .h(px(list_height))
+            .track_scroll(&self.command_palette.scroll_handle)
+            .into_any_element();
+            let mut list_container = div()
+                .w_full()
+                .h(px(list_height))
+                .flex()
+                .items_start()
+                .child(list);
+
+            if let Some(metrics) = self.command_palette_scrollbar_metrics(list_height, items.len()) {
+                let paint_style = ScrollbarPaintStyle {
+                    width: COMMAND_PALETTE_SCROLLBAR_WIDTH,
+                    track_radius: 0.0,
+                    thumb_radius: 0.0,
+                    thumb_inset: 0.0,
+                    marker_inset: 0.0,
+                    marker_radius: 0.0,
+                    track_color: style.scrollbar_track,
+                    thumb_color: style.scrollbar_thumb,
+                    active_thumb_color: style.scrollbar_thumb,
+                    marker_color: None,
+                    current_marker_color: None,
+                };
+                list_container = list_container.child(
+                    div()
+                        .w(px(COMMAND_PALETTE_SCROLLBAR_WIDTH + 4.0))
+                        .h_full()
+                        .pl(px(2.0))
+                        .pr(px(2.0))
+                        .child(scrollbar::render_vertical(
+                            "command-palette-scrollbar",
+                            metrics,
+                            paint_style,
+                            false,
+                            &[],
+                            None,
+                            0.0,
+                        )),
+                );
+            }
+
+            list_container.into_any_element()
+        };
+
+        div()
+            .id("command-palette-modal")
+            .size_full()
+            .absolute()
+            .top_0()
+            .left_0()
+            .occlude()
+            .on_click(cx.listener(|this, _event, _window, cx| {
+                this.close_command_palette(cx);
+            }))
+            .child(div().size_full().bg(style.overlay_bg).absolute().top_0().left_0())
+            .child(
+                div()
+                    .size_full()
+                    .absolute()
+                    .top_0()
+                    .left_0()
+                    .flex()
+                    .flex_col()
+                    .items_center()
+                    .pt(px(36.0))
+                    .child(
+                        div()
+                            .id("command-palette-panel")
+                            .w(px(COMMAND_PALETTE_WIDTH))
+                            .px(px(10.0))
+                            .py(px(10.0))
+                            .rounded(px(COMMAND_PALETTE_PANEL_RADIUS))
+                            .bg(style.panel_bg)
+                            .border_1()
+                            .border_color(style.panel_border)
+                            .on_click(cx.listener(|_this, _event, _window, cx| {
+                                cx.stop_propagation();
+                            }))
+                            .child(
+                                div()
+                                    .w_full()
+                                    .pb(px(6.0))
+                                    .text_size(px(11.0))
+                                    .text_color(style.muted_text)
+                                    .child(mode_title),
+                            )
+                            .child(
+                                div()
+                                    .id("command-palette-input")
+                                    .w_full()
+                                    .h(px(34.0))
+                                    .px(px(10.0))
+                                    .py(px(8.0))
+                                    .relative()
+                                    .rounded(px(COMMAND_PALETTE_INPUT_RADIUS))
+                                    .bg(style.input_bg)
+                                    .border_1()
+                                    .border_color(style.panel_border)
+                                    .child(div().w_full().h_full().relative().child(
+                                        self.render_inline_input_layer(
+                                            input_font.clone(),
+                                            px(13.0),
+                                            style.primary_text.into(),
+                                            style.input_selection.into(),
+                                            InlineInputAlignment::Left,
+                                            cx,
+                                        ),
+                                    )),
+                            )
+                            .child(div().h(px(8.0)))
+                            .child(list)
+                            .child(
+                                div()
+                                    .pt(px(8.0))
+                                    .text_size(px(11.0))
+                                    .text_color(style.muted_text)
+                                    .child(footer_hint),
+                            ),
+                    ),
+            )
+            .into_any()
+    }
+}
