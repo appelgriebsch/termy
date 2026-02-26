@@ -1,6 +1,45 @@
 use super::*;
 
 impl TerminalView {
+    pub(in super::super) fn execute_tab_command_action(
+        &mut self,
+        action: CommandAction,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        match action {
+            CommandAction::RenameTab => {
+                self.begin_rename_tab(self.active_tab, cx);
+                termy_toast::info("Rename mode enabled");
+                true
+            }
+            CommandAction::NewTab => {
+                self.add_tab(cx);
+                true
+            }
+            CommandAction::CloseTab => {
+                self.close_active_tab(cx);
+                true
+            }
+            CommandAction::MoveTabLeft => {
+                self.move_active_tab_left(cx);
+                true
+            }
+            CommandAction::MoveTabRight => {
+                self.move_active_tab_right(cx);
+                true
+            }
+            CommandAction::SwitchTabLeft => {
+                self.switch_active_tab_left(cx);
+                true
+            }
+            CommandAction::SwitchTabRight => {
+                self.switch_active_tab_right(cx);
+                true
+            }
+            _ => false,
+        }
+    }
+
     fn adjacent_tab_index(
         active_tab: usize,
         tab_count: usize,

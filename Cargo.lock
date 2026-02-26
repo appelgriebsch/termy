@@ -5516,6 +5516,7 @@ dependencies = [
  "tempfile",
  "termy_auto_update",
  "termy_auto_update_ui",
+ "termy_cli_install_core",
  "termy_command_core",
  "termy_config_core",
  "termy_native_sdk",
@@ -5561,6 +5562,13 @@ dependencies = [
  "termy_release_core",
  "termy_theme_core",
  "termy_themes",
+]
+
+[[package]]
+name = "termy_cli_install_core"
+version = "0.1.0"
+dependencies = [
+ "dirs 6.0.0",
 ]
 
 [[package]]
