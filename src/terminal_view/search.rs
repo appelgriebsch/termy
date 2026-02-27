@@ -2,6 +2,44 @@ use super::*;
 use alacritty_terminal::grid::Dimensions;
 
 impl TerminalView {
+    pub(super) fn execute_search_command_action(
+        &mut self,
+        action: CommandAction,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        match action {
+            CommandAction::OpenSearch => {
+                self.open_search(cx);
+                true
+            }
+            CommandAction::CloseSearch => {
+                self.close_search(cx);
+                true
+            }
+            CommandAction::SearchNext => {
+                self.search_next(cx);
+                true
+            }
+            CommandAction::SearchPrevious => {
+                self.search_previous(cx);
+                true
+            }
+            CommandAction::ToggleSearchCaseSensitive => {
+                self.search_state.toggle_case_sensitive();
+                self.perform_search();
+                cx.notify();
+                true
+            }
+            CommandAction::ToggleSearchRegex => {
+                self.search_state.toggle_regex_mode();
+                self.perform_search();
+                cx.notify();
+                true
+            }
+            _ => false,
+        }
+    }
+
     pub(super) fn open_search(&mut self, cx: &mut Context<Self>) {
         if self.search_open {
             return;

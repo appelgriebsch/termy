@@ -1,0 +1,316 @@
+use super::super::scrollbar as terminal_scrollbar;
+use super::*;
+use crate::ui::scrollbar as ui_scrollbar;
+
+impl TerminalView {
+    fn consume_suppressed_scroll_event(
+        &mut self,
+        touch_phase: TouchPhase,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        let Some(until) = self.input_scroll_suppress_until else {
+            return false;
+        };
+
+        match touch_phase {
+            TouchPhase::Started => {
+                self.input_scroll_suppress_until = None;
+                false
+            }
+            TouchPhase::Ended => {
+                self.input_scroll_suppress_until = None;
+                cx.stop_propagation();
+                true
+            }
+            TouchPhase::Moved => {
+                let now = Instant::now();
+                // Block residual momentum until we see a clear gesture boundary.
+                // Fallback timeout keeps non-touch wheel devices from being blocked.
+                let fallback_release = until + Duration::from_millis(INPUT_SCROLL_SUPPRESS_MS * 3);
+                if now < fallback_release {
+                    cx.stop_propagation();
+                    true
+                } else {
+                    self.input_scroll_suppress_until = None;
+                    false
+                }
+            }
+        }
+    }
+
+    pub(in super::super) fn terminal_scroll_lines_from_pixels(
+        accumulated_pixels: &mut f32,
+        delta_pixels: f32,
+        line_height: f32,
+        viewport_height: f32,
+    ) -> i32 {
+        if line_height <= f32::EPSILON {
+            return 0;
+        }
+
+        let old_offset = (*accumulated_pixels / line_height) as i32;
+        *accumulated_pixels += delta_pixels;
+        let new_offset = (*accumulated_pixels / line_height) as i32;
+
+        if viewport_height > 0.0 {
+            *accumulated_pixels %= viewport_height;
+        }
+
+        new_offset - old_offset
+    }
+
+    pub(in super::super) fn terminal_scroll_delta_to_lines(&mut self, event: &ScrollWheelEvent) -> i32 {
+        match event.touch_phase {
+            TouchPhase::Started => {
+                self.terminal_scroll_accumulator_y = 0.0;
+                0
+            }
+            TouchPhase::Ended => 0,
+            TouchPhase::Moved => {
+                let size = self.active_terminal().size();
+                if size.rows == 0 {
+                    return 0;
+                }
+
+                let line_height: f32 = size.cell_height.into();
+                let viewport_height = line_height * f32::from(size.rows);
+                let raw_delta_pixels: f32 = event.delta.pixel_delta(size.cell_height).y.into();
+                let delta_pixels = raw_delta_pixels * self.mouse_scroll_multiplier;
+
+                Self::terminal_scroll_lines_from_pixels(
+                    &mut self.terminal_scroll_accumulator_y,
+                    delta_pixels,
+                    line_height,
+                    viewport_height,
+                )
+            }
+        }
+    }
+
+    pub(in super::super) fn terminal_scrollbar_hit_test(
+        &self,
+        position: gpui::Point<Pixels>,
+        window: &Window,
+    ) -> Option<TerminalScrollbarHit> {
+        let (display_offset, _) = self.active_terminal().scroll_state();
+        let force_visible = display_offset > 0
+            && self.terminal_scrollbar_mode() != ui_scrollbar::ScrollbarVisibilityMode::AlwaysOff;
+        let alpha = self.terminal_scrollbar_alpha(Instant::now());
+        if !force_visible
+            && alpha <= f32::EPSILON
+            && !self.terminal_scrollbar_visibility_controller.is_dragging()
+        {
+            return None;
+        }
+
+        let surface = self.terminal_surface_geometry(window)?;
+        let scrollbar_left = surface.origin_x + surface.width - TERMINAL_SCROLLBAR_GUTTER_WIDTH;
+        let scrollbar_right = surface.origin_x + surface.width;
+
+        let x: f32 = position.x.into();
+        if x < scrollbar_left || x > scrollbar_right {
+            return None;
+        }
+
+        let y: f32 = position.y.into();
+        if y < surface.origin_y || y > surface.origin_y + surface.height {
+            return None;
+        }
+
+        let layout = self.terminal_scrollbar_layout_for_track(surface.height)?;
+        let metrics = layout.metrics;
+        let local_y = y - surface.origin_y;
+        let thumb_hit =
+            local_y >= metrics.thumb_top && local_y <= metrics.thumb_top + metrics.thumb_height;
+
+        Some(TerminalScrollbarHit {
+            local_y,
+            thumb_hit,
+            thumb_top: metrics.thumb_top,
+        })
+    }
+
+    fn apply_terminal_scroll_offset(
+        &mut self,
+        target_offset: f32,
+        layout: terminal_scrollbar::TerminalScrollbarLayout,
+    ) -> bool {
+        let (display_offset, _) = self.active_terminal().scroll_state();
+        let line_height = layout.range.viewport_extent / layout.viewport_rows as f32;
+        if line_height <= f32::EPSILON {
+            return false;
+        }
+
+        let target_display_offset = (ui_scrollbar::invert_offset_axis(
+            target_offset,
+            layout.range.max_offset,
+        ) / line_height)
+            .round()
+            .clamp(0.0, layout.history_size as f32) as i32;
+        let delta = target_display_offset - display_offset as i32;
+        if delta == 0 {
+            return false;
+        }
+
+        self.active_terminal().scroll_display(delta)
+    }
+
+    pub(in super::super) fn handle_terminal_scrollbar_mouse_down(
+        &mut self,
+        hit: TerminalScrollbarHit,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(surface) = self.terminal_surface_geometry(window) else {
+            return;
+        };
+        let Some(layout) = self.terminal_scrollbar_layout_for_track(surface.height) else {
+            return;
+        };
+        let range = layout.range;
+        let metrics = layout.metrics;
+
+        if hit.thumb_hit {
+            let thumb_grab_offset = (hit.local_y - hit.thumb_top).clamp(0.0, metrics.thumb_height);
+            self.start_terminal_scrollbar_drag(thumb_grab_offset, cx);
+            cx.notify();
+            return;
+        }
+
+        let changed = self.apply_terminal_scroll_offset(
+            ui_scrollbar::offset_from_track_click(hit.local_y, range, metrics),
+            layout,
+        );
+        if changed {
+            self.terminal_scroll_accumulator_y = 0.0;
+        }
+        self.mark_terminal_scrollbar_activity(cx);
+        cx.notify();
+    }
+
+    pub(in super::super) fn handle_terminal_scrollbar_drag(
+        &mut self,
+        position: gpui::Point<Pixels>,
+        window: &Window,
+        cx: &mut Context<Self>,
+    ) {
+        let Some(drag) = self.terminal_scrollbar_drag else {
+            return;
+        };
+        let Some(surface) = self.terminal_surface_geometry(window) else {
+            return;
+        };
+        let Some(layout) = self.terminal_scrollbar_layout_for_track(surface.height) else {
+            return;
+        };
+        let range = layout.range;
+        let metrics = layout.metrics;
+
+        let y: f32 = position.y.into();
+        let local_y = (y - surface.origin_y).clamp(0.0, surface.height);
+        let thumb_top = (local_y - drag.thumb_grab_offset).clamp(0.0, metrics.travel);
+        let changed = self.apply_terminal_scroll_offset(
+            ui_scrollbar::offset_from_thumb_top(thumb_top, range, metrics),
+            layout,
+        );
+        if changed {
+            self.terminal_scroll_accumulator_y = 0.0;
+            cx.notify();
+        }
+    }
+
+    pub(in super::super) fn scroll_to_bottom(&mut self, cx: &mut Context<Self>) {
+        if self.active_terminal().scroll_to_bottom() {
+            self.mark_terminal_scrollbar_activity(cx);
+            cx.notify();
+        }
+    }
+
+    pub(in super::super) fn handle_terminal_scroll_wheel(
+        &mut self,
+        event: &ScrollWheelEvent,
+        _window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.consume_suppressed_scroll_event(event.touch_phase, cx) {
+            return;
+        }
+
+        cx.stop_propagation();
+        if matches!(event.touch_phase, TouchPhase::Moved) {
+            self.mark_terminal_scrollbar_activity(cx);
+        }
+
+        let delta_lines = self.terminal_scroll_delta_to_lines(event);
+        if delta_lines == 0 {
+            return;
+        }
+
+        if self.active_terminal().scroll_display(delta_lines) {
+            cx.notify();
+        } else {
+            self.terminal_scroll_accumulator_y = 0.0;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn terminal_scroll_lines_track_single_line_steps() {
+        let mut accumulated = 0.0;
+        assert_eq!(
+            TerminalView::terminal_scroll_lines_from_pixels(&mut accumulated, 24.0, 24.0, 480.0),
+            1
+        );
+    }
+
+    #[test]
+    fn terminal_scroll_lines_accumulate_fractional_pixels() {
+        let mut accumulated = 0.0;
+        assert_eq!(
+            TerminalView::terminal_scroll_lines_from_pixels(&mut accumulated, 8.0, 24.0, 480.0),
+            0
+        );
+        assert_eq!(
+            TerminalView::terminal_scroll_lines_from_pixels(&mut accumulated, 8.0, 24.0, 480.0),
+            0
+        );
+        assert_eq!(
+            TerminalView::terminal_scroll_lines_from_pixels(&mut accumulated, 8.0, 24.0, 480.0),
+            1
+        );
+    }
+
+    #[test]
+    fn terminal_scroll_lines_preserve_sign() {
+        let mut accumulated = 0.0;
+        assert_eq!(
+            TerminalView::terminal_scroll_lines_from_pixels(&mut accumulated, -30.0, 24.0, 480.0),
+            -1
+        );
+    }
+
+    #[test]
+    fn terminal_scroll_lines_wrap_accumulator_by_viewport_height() {
+        let mut accumulated = 24.0 * 19.0;
+        assert_eq!(
+            TerminalView::terminal_scroll_lines_from_pixels(&mut accumulated, 24.0, 24.0, 480.0),
+            1
+        );
+        assert!(accumulated.abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn terminal_scroll_lines_ignore_zero_line_height() {
+        let mut accumulated = 12.0;
+        assert_eq!(
+            TerminalView::terminal_scroll_lines_from_pixels(&mut accumulated, 24.0, 0.0, 480.0),
+            0
+        );
+        assert_eq!(accumulated, 12.0);
+    }
+
+}

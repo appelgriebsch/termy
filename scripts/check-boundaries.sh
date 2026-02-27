@@ -14,6 +14,7 @@ check_forbidden_dep() {
 check_forbidden_dep "termy_command_core" "gpui"
 check_forbidden_dep "termy_command_core" "termy_config_core"
 check_forbidden_dep "termy_config_core" "termy_themes"
+check_forbidden_dep "termy_cli_install_core" "gpui"
 check_forbidden_dep "termy_cli" "gpui"
 
 cargo run -p xtask -- generate-keybindings-doc --check

@@ -1,6 +1,7 @@
 [workspace]
 members = [
   ".",
+  "crates/cli_install_core",
   "crates/command_core",
   "crates/config_core",
   "crates/release_core",
@@ -67,6 +68,7 @@ termy_search = { path = "crates/search" }
 termy_native_sdk = { path = "crates/native_sdk" }
 termy_config_core = { path = "crates/config_core" }
 termy_command_core = { path = "crates/command_core" }
+termy_cli_install_core = { path = "crates/cli_install_core" }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 # Pin core-text to 21.0.0 to avoid core-graphics version conflict on macOS.
