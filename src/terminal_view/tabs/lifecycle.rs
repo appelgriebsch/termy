@@ -4,6 +4,7 @@ impl TerminalView {
     pub(in super::super) fn execute_tab_command_action(
         &mut self,
         action: CommandAction,
+        window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
         match action {
@@ -17,7 +18,7 @@ impl TerminalView {
                 true
             }
             CommandAction::CloseTab => {
-                self.close_active_tab(cx);
+                self.request_active_tab_close(window, cx);
                 true
             }
             CommandAction::MoveTabLeft => {
@@ -204,10 +205,6 @@ impl TerminalView {
         self.clear_selection();
         self.scroll_active_tab_into_view();
         cx.notify();
-    }
-
-    pub(crate) fn close_active_tab(&mut self, cx: &mut Context<Self>) {
-        self.close_tab(self.active_tab, cx);
     }
 
     pub(crate) fn begin_rename_tab(&mut self, index: usize, cx: &mut Context<Self>) {

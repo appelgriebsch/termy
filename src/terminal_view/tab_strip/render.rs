@@ -643,7 +643,7 @@ impl TerminalView {
             .child("×")
             .on_mouse_down(
                 MouseButton::Left,
-                cx.listener(move |this, _event: &MouseDownEvent, _window, cx| {
+                cx.listener(move |this, _event: &MouseDownEvent, window, cx| {
                     let is_active = close_tab_index == this.active_tab;
                     if Self::tab_shows_close(
                         this.tab_close_visibility,
@@ -652,7 +652,7 @@ impl TerminalView {
                         this.tab_strip.hovered_tab_close,
                         close_tab_index,
                     ) {
-                        this.close_tab(close_tab_index, cx);
+                        this.request_tab_close_by_index(close_tab_index, window, cx);
                         cx.stop_propagation();
                     }
                 }),

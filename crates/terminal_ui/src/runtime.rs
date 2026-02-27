@@ -745,6 +745,13 @@ impl Terminal {
     }
 }
 
+impl Drop for Terminal {
+    fn drop(&mut self) {
+        // Ensure the PTY event loop exits so PTY drop can terminate/reap the child process.
+        let _ = self.pty_tx.0.send(Msg::Shutdown);
+    }
+}
+
 /// Convert a GPUI keystroke into bytes for the terminal PTY.
 ///
 /// `prompt_shortcuts_enabled` should be false for alternate-screen TUIs to avoid

@@ -2,9 +2,10 @@ use super::*;
 use gpui::PromptLevel;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum QuitRequestTarget {
+enum CloseRequestTarget {
     Application,
     WindowClose,
+    TabClose { tab_id: TabId },
 }
 
 impl TerminalView {
@@ -70,24 +71,75 @@ impl TerminalView {
         Ok(())
     }
 
-    fn busy_tab_titles_for_quit(&self) -> Vec<String> {
-        let fallback_title = self.fallback_title();
-        self.tabs
-            .iter()
-            .enumerate()
-            .filter(|(_, tab)| tab.running_process || tab.terminal.alternate_screen_mode())
-            .map(|(index, tab)| {
-                let title = tab.title.trim();
-                if title.is_empty() {
-                    format!("{fallback_title} {}", index + 1)
-                } else {
-                    title.to_string()
-                }
-            })
-            .collect()
+    fn tab_is_busy(tab: &TerminalTab) -> bool {
+        tab.running_process || tab.terminal.alternate_screen_mode()
     }
 
-    fn quit_warning_detail(&self, busy_titles: &[String]) -> String {
+    fn tab_title_for_warning(&self, index: usize, tab: &TerminalTab, fallback_title: &str) -> String {
+        let title = tab.title.trim();
+        if title.is_empty() {
+            format!("{fallback_title} {}", index + 1)
+        } else {
+            title.to_string()
+        }
+    }
+
+    fn busy_tab_titles_for_close_target(&self, target: CloseRequestTarget) -> Vec<String> {
+        let fallback_title = self.fallback_title();
+        match target {
+            CloseRequestTarget::Application | CloseRequestTarget::WindowClose => self
+                .tabs
+                .iter()
+                .enumerate()
+                .filter(|(_, tab)| Self::tab_is_busy(tab))
+                .map(|(index, tab)| self.tab_title_for_warning(index, tab, fallback_title))
+                .collect(),
+            CloseRequestTarget::TabClose { tab_id } => self
+                .tabs
+                .iter()
+                .enumerate()
+                .find(|(_, tab)| tab.id == tab_id && Self::tab_is_busy(tab))
+                .map(|(index, tab)| vec![self.tab_title_for_warning(index, tab, fallback_title)])
+                .unwrap_or_default(),
+        }
+    }
+
+    fn close_warning_title(target: CloseRequestTarget) -> &'static str {
+        match target {
+            CloseRequestTarget::Application | CloseRequestTarget::WindowClose => "Quit Termy?",
+            CloseRequestTarget::TabClose { .. } => "Close Tab?",
+        }
+    }
+
+    fn close_warning_buttons(target: CloseRequestTarget) -> &'static [&'static str] {
+        match target {
+            CloseRequestTarget::Application | CloseRequestTarget::WindowClose => &["Quit", "Cancel"],
+            CloseRequestTarget::TabClose { .. } => &["Close Tab", "Cancel"],
+        }
+    }
+
+    fn close_warning_final_prompt(target: CloseRequestTarget) -> &'static str {
+        match target {
+            CloseRequestTarget::Application | CloseRequestTarget::WindowClose => "Quit anyway?",
+            CloseRequestTarget::TabClose { .. } => "Close it anyway?",
+        }
+    }
+
+    fn close_warning_detail(&self, target: CloseRequestTarget, busy_titles: &[String]) -> String {
+        if matches!(target, CloseRequestTarget::TabClose { .. }) {
+            let mut detail =
+                "This tab is running a command or fullscreen terminal app:\n".to_string();
+
+            if let Some(title) = busy_titles.first() {
+                detail.push_str("- ");
+                detail.push_str(title);
+                detail.push('\n');
+            }
+
+            detail.push_str("\nClose this tab anyway?");
+            return detail;
+        }
+
         let count = busy_titles.len();
         let mut detail = format!(
             "{} tab{} {} running a command or fullscreen terminal app:\n",
@@ -102,13 +154,39 @@ impl TerminalView {
             detail.push('\n');
         }
 
-        detail.push_str("\nQuit anyway?");
+        detail.push('\n');
+        detail.push_str(Self::close_warning_final_prompt(target));
         detail
     }
 
-    fn request_quit(
+    fn close_tab_by_id(&mut self, tab_id: TabId, cx: &mut Context<Self>) {
+        if let Some(index) = self.tabs.iter().position(|tab| tab.id == tab_id) {
+            self.close_tab(index, cx);
+        }
+    }
+
+    fn follow_through_close_request(
         &mut self,
-        target: QuitRequestTarget,
+        target: CloseRequestTarget,
+        cx: &mut Context<Self>,
+    ) -> bool {
+        match target {
+            CloseRequestTarget::Application => {
+                self.allow_quit_without_prompt = true;
+                cx.quit();
+                false
+            }
+            CloseRequestTarget::WindowClose => true,
+            CloseRequestTarget::TabClose { tab_id } => {
+                self.close_tab_by_id(tab_id, cx);
+                false
+            }
+        }
+    }
+
+    fn request_close(
+        &mut self,
+        target: CloseRequestTarget,
         window: &mut Window,
         cx: &mut Context<Self>,
     ) -> bool {
@@ -116,23 +194,18 @@ impl TerminalView {
             return false;
         }
 
-        let busy_titles = self.busy_tab_titles_for_quit();
+        let busy_titles = self.busy_tab_titles_for_close_target(target);
         if !self.warn_on_quit_with_running_process || busy_titles.is_empty() {
-            if target == QuitRequestTarget::Application {
-                self.allow_quit_without_prompt = true;
-                cx.quit();
-                return false;
-            }
-            return true;
+            return self.follow_through_close_request(target, cx);
         }
 
         self.quit_prompt_in_flight = true;
-        let detail = self.quit_warning_detail(&busy_titles);
+        let detail = self.close_warning_detail(target, &busy_titles);
         let prompt = window.prompt(
             PromptLevel::Warning,
-            "Quit Termy?",
+            Self::close_warning_title(target),
             Some(&detail),
-            &["Quit", "Cancel"],
+            Self::close_warning_buttons(target),
             cx,
         );
         let window_handle = window.window_handle();
@@ -145,7 +218,9 @@ impl TerminalView {
                     .update(cx, |view, _| {
                         view.quit_prompt_in_flight = false;
                         if confirmed {
-                            view.allow_quit_without_prompt = true;
+                            if !matches!(target, CloseRequestTarget::TabClose { .. }) {
+                                view.allow_quit_without_prompt = true;
+                            }
                             follow_through = true;
                         }
                     })
@@ -159,9 +234,12 @@ impl TerminalView {
                 }
 
                 match target {
-                    QuitRequestTarget::Application => cx.quit(),
-                    QuitRequestTarget::WindowClose => {
+                    CloseRequestTarget::Application => cx.quit(),
+                    CloseRequestTarget::WindowClose => {
                         let _ = window_handle.update(cx, |_, window, _| window.remove_window());
+                    }
+                    CloseRequestTarget::TabClose { tab_id } => {
+                        let _ = this.update(cx, |view, cx| view.close_tab_by_id(tab_id, cx));
                     }
                 }
             });
@@ -181,10 +259,35 @@ impl TerminalView {
             return true;
         }
 
-        self.request_quit(QuitRequestTarget::WindowClose, window, cx)
+        self.request_close(CloseRequestTarget::WindowClose, window, cx)
     }
 
     pub(in super::super) fn request_application_quit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.request_quit(QuitRequestTarget::Application, window, cx);
+        self.request_close(CloseRequestTarget::Application, window, cx);
+    }
+
+    pub(in super::super) fn request_active_tab_close(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.tabs.len() <= 1 || self.active_tab >= self.tabs.len() {
+            return;
+        }
+        let tab_id = self.tabs[self.active_tab].id;
+        let _ = self.request_close(CloseRequestTarget::TabClose { tab_id }, window, cx);
+    }
+
+    pub(in super::super) fn request_tab_close_by_index(
+        &mut self,
+        index: usize,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        if self.tabs.len() <= 1 || index >= self.tabs.len() {
+            return;
+        }
+        let tab_id = self.tabs[index].id;
+        let _ = self.request_close(CloseRequestTarget::TabClose { tab_id }, window, cx);
     }
 }

@@ -56,7 +56,7 @@ impl TerminalView {
             | CommandAction::MoveTabRight
             | CommandAction::SwitchTabLeft
             | CommandAction::SwitchTabRight => {
-                self.execute_tab_command_action(action, cx);
+                self.execute_tab_command_action(action, window, cx);
             }
             CommandAction::MinimizeWindow => {
                 window.minimize_window();
