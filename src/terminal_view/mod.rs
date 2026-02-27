@@ -921,6 +921,7 @@ impl TerminalView {
                         let availability_changed = view.refresh_install_cli_availability();
                         if availability_changed {
                             view.refresh_command_palette_items_for_current_mode(cx);
+                            cx.set_menus(crate::menus::app_menus(view.install_cli_available()));
                         }
                         if config_changed || availability_changed {
                             cx.notify();

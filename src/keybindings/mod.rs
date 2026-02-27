@@ -25,7 +25,7 @@ pub fn install_keybindings(cx: &mut App, config: &AppConfig) {
         CommandAction::from_command_id(binding.action).to_key_binding(&binding.trigger)
     }));
     cx.bind_keys(crate::commands::inline_input_keybindings());
-    cx.set_menus(crate::menus::app_menus());
+    cx.set_menus(crate::menus::app_menus(!termy_cli_install_core::is_cli_installed()));
 }
 
 fn reorder_resolved_keybinds_for_menu_display(
