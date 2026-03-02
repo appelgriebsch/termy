@@ -36,6 +36,7 @@ pub(super) enum EditableField {
     WorkingDirFallback,
     WindowWidth,
     WindowHeight,
+    OpenaiApiKey,
     Color(termy_config_core::ColorSettingId),
 }
 
@@ -363,7 +364,8 @@ impl SettingsWindow {
             EditableField::WorkingDirectory
             | EditableField::WorkingDirFallback
             | EditableField::WindowWidth
-            | EditableField::WindowHeight => Self::advanced_field_spec(field),
+            | EditableField::WindowHeight
+            | EditableField::OpenaiApiKey => Self::advanced_field_spec(field),
             EditableField::Color(_) => FieldSpec {
                 root_setting: None,
                 codec: FieldCodec::Color,
@@ -495,6 +497,7 @@ impl SettingsWindow {
                 RootSettingId::WindowHeight,
                 NumericStepSpec { delta: 10.0, min: 100.0, max: 10000.0 },
             ),
+            EditableField::OpenaiApiKey => Self::text_field_spec(Some(RootSettingId::OpenaiApiKey)),
             _ => unreachable!("invalid advanced field"),
         }
     }
@@ -794,6 +797,7 @@ impl SettingsWindow {
             .to_string(),
             EditableField::WindowWidth => format!("{}", self.config.window_width.round() as i32),
             EditableField::WindowHeight => format!("{}", self.config.window_height.round() as i32),
+            EditableField::OpenaiApiKey => self.config.openai_api_key.clone().unwrap_or_default(),
             EditableField::Color(id) => self
                 .custom_color_for_id(id)
                 .map(|rgb| format!("#{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b))
@@ -1045,6 +1049,7 @@ mod tests {
             EditableField::WorkingDirFallback,
             EditableField::WindowWidth,
             EditableField::WindowHeight,
+            EditableField::OpenaiApiKey,
             EditableField::Color(termy_config_core::ColorSettingId::Foreground),
         ];
 

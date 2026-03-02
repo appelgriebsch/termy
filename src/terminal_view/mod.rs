@@ -37,6 +37,7 @@ use gpui::{AppContext, Entity};
 #[cfg(target_os = "macos")]
 use termy_auto_update::{AutoUpdater, UpdateState};
 
+mod ai_input;
 mod command_palette;
 mod inline_input;
 mod interaction;
@@ -813,6 +814,9 @@ pub struct TerminalView {
     search_input: InlineInputState,
     search_state: SearchState,
     search_debounce_token: u64,
+    // AI input state
+    ai_input_open: bool,
+    ai_input: InlineInputState,
     // Pending clipboard write from OSC 52
     pending_clipboard: Option<String>,
     quit_prompt_in_flight: bool,
@@ -1554,6 +1558,8 @@ impl TerminalView {
             search_input: InlineInputState::new(String::new()),
             search_state: SearchState::new(),
             search_debounce_token: 0,
+            ai_input_open: false,
+            ai_input: InlineInputState::new(String::new()),
             pending_clipboard: None,
             quit_prompt_in_flight: false,
             allow_quit_without_prompt: false,

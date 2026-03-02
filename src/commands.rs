@@ -916,6 +916,16 @@ define_commands!(
             MenuActionRole::Normal
         ))
     ),
+    (
+        ToggleAiInput,
+        TERMINAL_CONTEXT,
+        Some(palette(
+            "AI Input",
+            "ai assistant chat prompt",
+            CommandPaletteVisibility::Always
+        )),
+        None
+    ),
 );
 
 termy_command_core::termy_command_catalog!(impl_command_action_id_mapping);

@@ -335,6 +335,7 @@ define_root_settings! {
     (PaneFocusEffect, "pane_focus_effect", [], Terminal, "UI", "Pane Focus Effect", "How inactive panes are visually dimmed when a pane is active", ["pane", "focus", "dimming", "effect"], RootSettingValueKind::Enum, false),
     (PaneFocusStrength, "pane_focus_strength", [], Terminal, "UI", "Pane Focus Strength", "Strength of active pane emphasis (0.0 to 2.0)", ["pane", "focus", "strength", "dimming"], RootSettingValueKind::Numeric, false),
     (CommandPaletteShowKeybinds, "command_palette_show_keybinds", [], Terminal, "UI", "Show Keybindings In Palette", "Show shortcut badges in command palette rows", ["palette", "keybinds", "shortcuts"], RootSettingValueKind::Boolean, false),
+    (OpenaiApiKey, "openai_api_key", ["openai_key"], Advanced, "AI", "OpenAI API Key", "API key for OpenAI integration", ["openai", "api", "key", "ai", "gpt"], RootSettingValueKind::Text, false),
     (Keybind, "keybind", [], Keybindings, "KEYBINDS", "Keybind Directive", "Keybinding override directive", ["keybind", "shortcut", "command"], RootSettingValueKind::Special, true),
 }
 
@@ -476,6 +477,7 @@ pub fn root_setting_default_value(config: &AppConfig, id: RootSettingId) -> Opti
         }),
         RootSettingId::PaneFocusStrength => Some(config.pane_focus_strength.to_string()),
         RootSettingId::CommandPaletteShowKeybinds => Some(config.command_palette_show_keybinds.to_string()),
+        RootSettingId::OpenaiApiKey => config.openai_api_key.clone(),
         RootSettingId::Keybind => None,
     }
 }

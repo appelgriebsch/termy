@@ -37,7 +37,8 @@ impl SettingsWindow {
             EditableField::WorkingDirectory
             | EditableField::WorkingDirFallback
             | EditableField::WindowWidth
-            | EditableField::WindowHeight => self.apply_advanced_field(field, value),
+            | EditableField::WindowHeight
+            | EditableField::OpenaiApiKey => self.apply_advanced_field(field, value),
             EditableField::Color(id) => self.apply_color_field(id, value),
         }
     }
@@ -438,6 +439,15 @@ impl SettingsWindow {
                 }
                 self.config.window_height = parsed;
                 config::set_root_setting(termy_config_core::RootSettingId::WindowHeight, &parsed.to_string())
+            }
+            EditableField::OpenaiApiKey => {
+                if value.is_empty() {
+                    self.config.openai_api_key = None;
+                    config::set_root_setting(termy_config_core::RootSettingId::OpenaiApiKey, "none")
+                } else {
+                    self.config.openai_api_key = Some(value.to_string());
+                    config::set_root_setting(termy_config_core::RootSettingId::OpenaiApiKey, value)
+                }
             }
             _ => unreachable!("invalid advanced field"),
         }

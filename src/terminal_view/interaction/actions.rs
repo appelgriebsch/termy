@@ -128,6 +128,13 @@ impl TerminalView {
             CommandAction::InstallCli => {
                 self.execute_install_cli_command_action(action, cx);
             }
+            CommandAction::ToggleAiInput => {
+                if self.is_ai_input_open() {
+                    self.close_ai_input(cx);
+                } else {
+                    self.open_ai_input(cx);
+                }
+            }
         }
     }
 
@@ -525,6 +532,15 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) {
         self.execute_command_action(CommandAction::InstallCli, true, window, cx);
+    }
+
+    pub(in super::super) fn handle_toggle_ai_input_action(
+        &mut self,
+        _: &commands::ToggleAiInput,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
+        self.execute_command_action(CommandAction::ToggleAiInput, true, window, cx);
     }
 }
 

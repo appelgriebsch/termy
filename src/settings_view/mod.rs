@@ -347,6 +347,27 @@ impl SettingsWindow {
             return;
         }
 
+        // Handle Cmd+V (paste)
+        if Self::cmd_only(event.keystroke.modifiers)
+            && event.keystroke.key.eq_ignore_ascii_case("v")
+            && allow_text_editing
+        {
+            if let Some(clipboard_text) = cx.read_from_clipboard().and_then(|item| item.text()) {
+                // Filter out newlines for single-line input
+                let filtered_text: String = clipboard_text
+                    .chars()
+                    .filter(|c| *c != '\n' && *c != '\r')
+                    .collect();
+                if !filtered_text.is_empty() {
+                    if let Some(input) = self.active_input.as_mut() {
+                        input.state.replace_text_in_range(None, &filtered_text);
+                        cx.notify();
+                    }
+                }
+            }
+            return;
+        }
+
         match event.keystroke.key.as_str() {
             "enter" => {
                 if let Some(field) = active_field {

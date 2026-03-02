@@ -7,19 +7,19 @@ use super::super::{
     TAB_STROKE_FOREGROUND_MIX, TerminalView, resolve_chrome_stroke_color,
 };
 
-pub(super) const COMMAND_PALETTE_PANEL_RADIUS: f32 = 0.0;
-pub(super) const COMMAND_PALETTE_INPUT_RADIUS: f32 = 0.0;
+pub(in super::super) const COMMAND_PALETTE_PANEL_RADIUS: f32 = 0.0;
+pub(in super::super) const COMMAND_PALETTE_INPUT_RADIUS: f32 = 0.0;
 pub(super) const COMMAND_PALETTE_ROW_RADIUS: f32 = 0.0;
 pub(super) const COMMAND_PALETTE_SHORTCUT_RADIUS: f32 = 0.0;
 
 #[derive(Clone, Copy)]
-pub(super) struct CommandPaletteStyle {
-    pub(super) panel_bg: gpui::Rgba,
-    pub(super) panel_border: gpui::Rgba,
-    pub(super) primary_text: gpui::Rgba,
-    pub(super) muted_text: gpui::Rgba,
-    pub(super) input_bg: gpui::Rgba,
-    pub(super) input_selection: gpui::Rgba,
+pub(in super::super) struct CommandPaletteStyle {
+    pub(in super::super) panel_bg: gpui::Rgba,
+    pub(in super::super) panel_border: gpui::Rgba,
+    pub(in super::super) primary_text: gpui::Rgba,
+    pub(in super::super) muted_text: gpui::Rgba,
+    pub(in super::super) input_bg: gpui::Rgba,
+    pub(in super::super) input_selection: gpui::Rgba,
     pub(super) selected_bg: gpui::Rgba,
     pub(super) selected_border: gpui::Rgba,
     pub(super) shortcut_bg: gpui::Rgba,
@@ -37,7 +37,7 @@ pub(super) fn command_palette_border_color(
 }
 
 impl CommandPaletteStyle {
-    pub(super) fn resolve(view: &TerminalView) -> Self {
+    pub(in super::super) fn resolve(view: &TerminalView) -> Self {
         let overlay_style = view.overlay_style();
         let panel_bg = overlay_style.panel_background_with_floor(
             COMMAND_PALETTE_PANEL_BG_ALPHA,

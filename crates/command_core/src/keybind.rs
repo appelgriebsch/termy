@@ -144,6 +144,10 @@ pub fn default_keybinds_for_platform(platform: KeybindPlatform) -> Vec<DefaultKe
             trigger: "secondary-shift-g",
             action: CommandId::SearchPrevious,
         },
+        DefaultKeybind {
+            trigger: "secondary-k",
+            action: CommandId::ToggleAiInput,
+        },
     ];
 
     if matches!(platform, KeybindPlatform::MacOs) {

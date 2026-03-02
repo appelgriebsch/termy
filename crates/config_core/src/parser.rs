@@ -513,6 +513,9 @@ impl AppConfig {
                         config.command_palette_show_keybinds = parsed;
                     }
                 }
+                RootSettingId::OpenaiApiKey => {
+                    config.openai_api_key = parse_optional_string_value(value);
+                }
                 RootSettingId::Keybind => {
                     if let Some(parsed) = parse_string_field(
                         &mut diagnostics,

@@ -981,6 +981,11 @@ impl Render for TerminalView {
         } else {
             None
         };
+        let ai_input_overlay = if self.is_ai_input_open() {
+            Some(self.render_ai_input_modal(cx))
+        } else {
+            None
+        };
         let key_context = if self.has_active_inline_input() {
             "Terminal InlineInput"
         } else {
@@ -1333,6 +1338,7 @@ impl Render for TerminalView {
                     .when(self.install_cli_available(), |s| {
                         s.on_action(cx.listener(Self::handle_install_cli_action))
                     })
+                    .on_action(cx.listener(Self::handle_toggle_ai_input_action))
                     .on_action(cx.listener(Self::handle_inline_backspace_action))
                     .on_action(cx.listener(Self::handle_inline_delete_action))
                     .on_action(cx.listener(Self::handle_inline_move_left_action))
@@ -1362,7 +1368,8 @@ impl Render for TerminalView {
                     .child(terminal_grid_layer)
                     .children(terminal_scrollbar_overlay)
                     .children(command_palette_overlay)
-                    .children(search_overlay),
+                    .children(search_overlay)
+                    .children(ai_input_overlay),
             )
             .children(toast_overlay)
     }

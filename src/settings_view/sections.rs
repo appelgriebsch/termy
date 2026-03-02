@@ -718,6 +718,22 @@ impl SettingsWindow {
         ];
         let window_group = self.render_settings_group("WINDOW", window_rows);
 
+        let openai_api_key_meta = Self::setting_metadata_or_fallback("openai_api_key");
+        let openai_api_key = self
+            .config
+            .openai_api_key
+            .clone()
+            .unwrap_or_else(|| "Not configured".to_string());
+        let ai_rows = vec![self.render_editable_row(
+            "openai_api_key",
+            EditableField::OpenaiApiKey,
+            openai_api_key_meta.title,
+            openai_api_key_meta.description,
+            openai_api_key,
+            cx,
+        )];
+        let ai_group = self.render_settings_group("AI", ai_rows);
+
         let config_file_card = div()
             .py_4()
             .px_4()
@@ -782,6 +798,7 @@ impl SettingsWindow {
             .child(startup_group)
             .child(safety_group)
             .child(window_group)
+            .child(ai_group)
             .child(config_group)
     }
 

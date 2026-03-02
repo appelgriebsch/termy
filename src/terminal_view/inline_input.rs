@@ -20,6 +20,7 @@ enum InlineInputTarget {
     CommandPalette,
     RenameTab,
     Search,
+    AiInput,
 }
 
 #[derive(Clone, Debug)]
@@ -868,6 +869,8 @@ impl TerminalView {
             Some(InlineInputTarget::Search)
         } else if self.renaming_tab.is_some() {
             Some(InlineInputTarget::RenameTab)
+        } else if self.ai_input_open {
+            Some(InlineInputTarget::AiInput)
         } else {
             None
         }
@@ -923,6 +926,7 @@ impl TerminalView {
             InlineInputTarget::CommandPalette => Some(self.command_palette_input()),
             InlineInputTarget::Search => Some(&self.search_input),
             InlineInputTarget::RenameTab => Some(&self.rename_input),
+            InlineInputTarget::AiInput => Some(self.ai_input()),
         }
     }
 
@@ -931,6 +935,7 @@ impl TerminalView {
             InlineInputTarget::CommandPalette => Some(self.command_palette_input_mut()),
             InlineInputTarget::Search => Some(&mut self.search_input),
             InlineInputTarget::RenameTab => Some(&mut self.rename_input),
+            InlineInputTarget::AiInput => Some(self.ai_input_mut()),
         }
     }
 
@@ -973,6 +978,10 @@ impl TerminalView {
             Some(InlineInputTarget::RenameTab) => {
                 mutate(&mut self.rename_input);
                 self.enforce_tab_rename_limit();
+                cx.notify();
+            }
+            Some(InlineInputTarget::AiInput) => {
+                mutate(self.ai_input_mut());
                 cx.notify();
             }
             None => {}

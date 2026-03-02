@@ -281,6 +281,7 @@ pub struct AppConfig {
     pub pane_focus_effect: PaneFocusEffect,
     pub pane_focus_strength: f32,
     pub command_palette_show_keybinds: bool,
+    pub openai_api_key: Option<String>,
     pub keybind_lines: Vec<KeybindConfigLine>,
     pub colors: CustomColors,
 }
@@ -327,6 +328,7 @@ impl Default for AppConfig {
             pane_focus_effect: PaneFocusEffect::default(),
             pane_focus_strength: DEFAULT_PANE_FOCUS_STRENGTH,
             command_palette_show_keybinds: true,
+            openai_api_key: None,
             keybind_lines: Vec::new(),
             colors: CustomColors::default(),
         }
