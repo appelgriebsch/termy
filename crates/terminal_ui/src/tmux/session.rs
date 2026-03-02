@@ -217,6 +217,7 @@ fn normalized_tmux_path(path: Option<&OsStr>) -> Option<String> {
         .map(env::split_paths)
         .map(|paths| paths.collect())
         .unwrap_or_default();
+    path_entries.retain(|entry| !entry.as_os_str().is_empty());
 
     if path_entries.is_empty() {
         path_entries.extend(DEFAULT_SYSTEM_PATH_ENTRIES.into_iter().map(PathBuf::from));
@@ -419,6 +420,18 @@ mod tests {
         assert!(parsed.contains(&PathBuf::from("/opt/homebrew/sbin")));
         assert!(parsed.contains(&PathBuf::from("/usr/local/bin")));
         assert!(parsed.contains(&PathBuf::from("/usr/local/sbin")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn normalized_tmux_path_treats_empty_path_as_missing() {
+        let raw = OsString::from("");
+        let path = normalized_tmux_path(Some(raw.as_os_str())).expect("normalized path");
+        let parsed = std::env::split_paths(&OsString::from(path)).collect::<Vec<_>>();
+        assert!(parsed.contains(&PathBuf::from("/usr/bin")));
+        assert!(parsed.contains(&PathBuf::from("/bin")));
+        assert!(parsed.contains(&PathBuf::from("/usr/sbin")));
+        assert!(parsed.contains(&PathBuf::from("/sbin")));
     }
 
     #[cfg(unix)]
