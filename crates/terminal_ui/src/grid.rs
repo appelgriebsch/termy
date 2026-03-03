@@ -138,6 +138,20 @@ struct TextBatch {
 }
 
 #[derive(Clone, Copy)]
+struct BlockDraw {
+    row: usize,
+    col: usize,
+    geometry: BlockElementGeometry,
+    fg: Hsla,
+}
+
+#[derive(Clone)]
+enum TextDrawOp {
+    Batch(TextBatch),
+    Block(BlockDraw),
+}
+
+#[derive(Clone, Copy)]
 struct TextBatchKey {
     bold: bool,
     fg: Hsla,
@@ -500,53 +514,47 @@ impl Element for TerminalGrid {
             a: 1.0,
         };
 
-        let text_batches = self.collect_text_batches(cursor_fg, highlight_fg);
-        for batch in text_batches {
-            let x = origin.x + self.cell_size.width * batch.start_col as f32;
-            let y = origin.y + self.cell_size.height * batch.row as f32;
-            let font = if batch.bold { &font_bold } else { &font_normal };
-            let run = TextRun {
-                len: batch.text.len(),
-                font: font.clone(),
-                color: batch.fg,
-                background_color: None,
-                underline: batch.underline,
-                strikethrough: None,
-            };
+        let draw_ops = self.collect_draw_ops(cursor_fg, highlight_fg);
+        for op in draw_ops {
+            match op {
+                TextDrawOp::Batch(batch) => {
+                    let x = origin.x + self.cell_size.width * batch.start_col as f32;
+                    let y = origin.y + self.cell_size.height * batch.row as f32;
+                    let font = if batch.bold { &font_bold } else { &font_normal };
+                    let run = TextRun {
+                        len: batch.text.len(),
+                        font: font.clone(),
+                        color: batch.fg,
+                        background_color: None,
+                        underline: batch.underline,
+                        strikethrough: None,
+                    };
 
-            let line = window.text_system().shape_line(
-                batch.text.into(),
-                self.font_size,
-                &[run],
-                Some(self.cell_size.width),
-            );
-            let _ = line.paint(
-                point(x, y),
-                self.cell_size.height,
-                TextAlign::Left,
-                None,
-                window,
-                cx,
-            );
-        }
-
-        // Keep block-element rendering on its existing quad path to preserve hard-edge
-        // behavior while text glyphs use batched shaping.
-        for cell in &self.cells {
-            if !Self::cell_is_drawable_text(cell) {
-                continue;
+                    let line = window.text_system().shape_line(
+                        batch.text.into(),
+                        self.font_size,
+                        &[run],
+                        Some(self.cell_size.width),
+                    );
+                    let _ = line.paint(
+                        point(x, y),
+                        self.cell_size.height,
+                        TextAlign::Left,
+                        None,
+                        window,
+                        cx,
+                    );
+                }
+                TextDrawOp::Block(block) => {
+                    let x = origin.x + self.cell_size.width * block.col as f32;
+                    let y = origin.y + self.cell_size.height * block.row as f32;
+                    let cell_bounds = Bounds {
+                        origin: point(x, y),
+                        size: self.cell_size,
+                    };
+                    paint_block_element_quad(window, cell_bounds, block.geometry, block.fg);
+                }
             }
-            let Some(geometry) = block_element_geometry(cell.char) else {
-                continue;
-            };
-            let x = origin.x + self.cell_size.width * cell.col as f32;
-            let y = origin.y + self.cell_size.height * cell.row as f32;
-            let cell_bounds = Bounds {
-                origin: point(x, y),
-                size: self.cell_size,
-            };
-            let fg_color = self.cell_fg_color(cell, cursor_fg, highlight_fg);
-            paint_block_element_quad(window, cell_bounds, geometry, fg_color);
         }
     }
 }
@@ -582,19 +590,34 @@ impl TerminalGrid {
         })
     }
 
-    fn collect_text_batches(&self, cursor_fg: Hsla, highlight_fg: Hsla) -> Vec<TextBatch> {
-        let mut batches = Vec::new();
+    fn push_pending_text_batch(current: &mut Option<TextBatch>, ops: &mut Vec<TextDrawOp>) {
+        if let Some(batch) = current.take() {
+            ops.push(TextDrawOp::Batch(batch));
+        }
+    }
+
+    fn collect_draw_ops(&self, cursor_fg: Hsla, highlight_fg: Hsla) -> Vec<TextDrawOp> {
+        let mut ops = Vec::new();
         let mut current: Option<TextBatch> = None;
 
         for cell in &self.cells {
-            if !Self::cell_is_drawable_text(cell) || block_element_geometry(cell.char).is_some() {
-                if let Some(batch) = current.take() {
-                    batches.push(batch);
-                }
+            if !Self::cell_is_drawable_text(cell) {
+                Self::push_pending_text_batch(&mut current, &mut ops);
                 continue;
             }
 
             let fg = self.cell_fg_color(cell, cursor_fg, highlight_fg);
+            if let Some(geometry) = block_element_geometry(cell.char) {
+                Self::push_pending_text_batch(&mut current, &mut ops);
+                ops.push(TextDrawOp::Block(BlockDraw {
+                    row: cell.row,
+                    col: cell.col,
+                    geometry,
+                    fg,
+                }));
+                continue;
+            }
+
             let underline = self.cell_underline(cell.row, cell.col, fg);
             let key = TextBatchKey {
                 bold: cell.bold,
@@ -612,17 +635,13 @@ impl TerminalGrid {
                 continue;
             }
 
-            if let Some(batch) = current.take() {
-                batches.push(batch);
-            }
+            Self::push_pending_text_batch(&mut current, &mut ops);
             current = Some(TextBatch::new(cell.col, cell.row, cell.char, key, underline));
         }
 
-        if let Some(batch) = current {
-            batches.push(batch);
-        }
+        Self::push_pending_text_batch(&mut current, &mut ops);
 
-        batches
+        ops
     }
 }
 
@@ -674,8 +693,8 @@ mod tests {
         }
     }
 
-    fn collect_batches(grid: &TerminalGrid) -> Vec<TextBatch> {
-        grid.collect_text_batches(
+    fn collect_draw_ops(grid: &TerminalGrid) -> Vec<TextDrawOp> {
+        grid.collect_draw_ops(
             Hsla {
                 h: 0.0,
                 s: 0.0,
@@ -689,6 +708,16 @@ mod tests {
                 a: 1.0,
             },
         )
+    }
+
+    fn collect_batches(grid: &TerminalGrid) -> Vec<TextBatch> {
+        collect_draw_ops(grid)
+            .into_iter()
+            .filter_map(|op| match op {
+                TextDrawOp::Batch(batch) => Some(batch),
+                TextDrawOp::Block(_) => None,
+            })
+            .collect()
     }
 
     #[test]
@@ -838,5 +867,121 @@ mod tests {
         assert_eq!(batches.len(), 2);
         assert_eq!(batches[0].text, "你");
         assert_eq!(batches[1].text, "x");
+    }
+
+    #[test]
+    fn draw_ops_interleave_text_and_block_in_cell_order() {
+        let grid = test_grid(
+            vec![test_cell(0, 0, 'a'), test_cell(1, 0, '\u{2588}'), test_cell(2, 0, 'b')],
+            None,
+        );
+        let ops = collect_draw_ops(&grid);
+        assert_eq!(ops.len(), 3);
+        assert!(matches!(&ops[0], TextDrawOp::Batch(batch) if batch.text == "a"));
+        assert!(matches!(&ops[1], TextDrawOp::Block(_)));
+        assert!(matches!(&ops[2], TextDrawOp::Batch(batch) if batch.text == "b"));
+    }
+
+    #[test]
+    fn draw_ops_flush_batch_before_block() {
+        let grid = test_grid(
+            vec![
+                test_cell(0, 0, 'a'),
+                test_cell(1, 0, 'b'),
+                test_cell(2, 0, '\u{2588}'),
+                test_cell(3, 0, 'c'),
+                test_cell(4, 0, 'd'),
+            ],
+            None,
+        );
+        let ops = collect_draw_ops(&grid);
+        assert_eq!(ops.len(), 3);
+        assert!(matches!(&ops[0], TextDrawOp::Batch(batch) if batch.text == "ab"));
+        assert!(matches!(&ops[1], TextDrawOp::Block(_)));
+        assert!(matches!(&ops[2], TextDrawOp::Batch(batch) if batch.text == "cd"));
+    }
+
+    #[test]
+    fn draw_ops_skip_non_drawable_and_preserve_subsequent_order() {
+        let mut spacer = test_cell(1, 0, 'x');
+        spacer.render_text = false;
+        let mut control = test_cell(3, 0, '\u{001B}');
+        control.render_text = true;
+        let grid = test_grid(
+            vec![
+                test_cell(0, 0, 'a'),
+                spacer,
+                test_cell(2, 0, '\u{2588}'),
+                control,
+                test_cell(4, 0, 'b'),
+            ],
+            None,
+        );
+        let ops = collect_draw_ops(&grid);
+        assert_eq!(ops.len(), 3);
+        assert!(matches!(&ops[0], TextDrawOp::Batch(batch) if batch.text == "a"));
+        assert!(matches!(&ops[1], TextDrawOp::Block(_)));
+        assert!(matches!(&ops[2], TextDrawOp::Batch(batch) if batch.text == "b"));
+    }
+
+    #[test]
+    fn draw_ops_preserve_row_boundaries_with_blocks() {
+        let grid = test_grid(
+            vec![
+                test_cell(0, 0, 'a'),
+                test_cell(1, 0, 'b'),
+                test_cell(0, 1, 'c'),
+                test_cell(1, 1, '\u{2588}'),
+                test_cell(2, 1, 'd'),
+            ],
+            None,
+        );
+        let ops = collect_draw_ops(&grid);
+        assert_eq!(ops.len(), 4);
+        assert!(matches!(&ops[0], TextDrawOp::Batch(batch) if batch.text == "ab" && batch.row == 0));
+        assert!(matches!(&ops[1], TextDrawOp::Batch(batch) if batch.text == "c" && batch.row == 1));
+        assert!(matches!(&ops[2], TextDrawOp::Block(block) if block.row == 1 && block.col == 1));
+        assert!(matches!(&ops[3], TextDrawOp::Batch(batch) if batch.text == "d" && batch.row == 1));
+    }
+
+    #[test]
+    fn block_draw_uses_same_fg_precedence_as_text() {
+        let mut selected_text = test_cell(0, 0, 'x');
+        selected_text.selected = true;
+        let mut selected_block = test_cell(1, 0, '\u{2588}');
+        selected_block.selected = true;
+        let grid = test_grid(vec![selected_text, selected_block], None);
+        let ops = collect_draw_ops(&grid);
+        assert_eq!(ops.len(), 2);
+        let text_fg = match &ops[0] {
+            TextDrawOp::Batch(batch) => batch.fg,
+            TextDrawOp::Block(_) => panic!("expected text batch"),
+        };
+        let block_fg = match &ops[1] {
+            TextDrawOp::Block(block) => block.fg,
+            TextDrawOp::Batch(_) => panic!("expected block draw"),
+        };
+        assert_eq!(text_fg, grid.selection_fg);
+        assert_eq!(block_fg, grid.selection_fg);
+
+        let mut cursor_block = test_cell(0, 0, '\u{2588}');
+        cursor_block.is_cursor = true;
+        cursor_block.selected = true;
+        cursor_block.search_current = true;
+        let grid = test_grid(vec![cursor_block], None);
+        let ops = collect_draw_ops(&grid);
+        let block_fg = match &ops[0] {
+            TextDrawOp::Block(block) => block.fg,
+            TextDrawOp::Batch(_) => panic!("expected block draw"),
+        };
+        assert_eq!(
+            block_fg,
+            Hsla {
+                h: 0.0,
+                s: 0.0,
+                l: 0.0,
+                a: 1.0
+            }
+        );
     }
 }
