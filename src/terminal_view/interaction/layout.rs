@@ -228,14 +228,14 @@ impl TerminalView {
 
         match backend_mode {
             RuntimeKind::Tmux => {
-                if self.tmux_client_cols() != cols || self.tmux_client_rows() != rows {
-                    if let Err(error) = self.sync_tmux_client_size(cols, rows) {
-                        let now = Instant::now();
-                        if self.should_emit_tmux_resize_error_toast(now) {
-                            termy_toast::error(format!("tmux resize failed: {error}"));
-                        } else {
-                            log::debug!("tmux resize failed (toast debounced): {error}");
-                        }
+                if (self.tmux_client_cols() != cols || self.tmux_client_rows() != rows)
+                    && let Err(error) = self.sync_tmux_client_size(cols, rows)
+                {
+                    let now = Instant::now();
+                    if self.should_emit_tmux_resize_error_toast(now) {
+                        termy_toast::error(format!("tmux resize failed: {error}"));
+                    } else {
+                        log::debug!("tmux resize failed (toast debounced): {error}");
                     }
                 }
             }

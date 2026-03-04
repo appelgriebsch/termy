@@ -438,8 +438,7 @@ mod tests {
             let defaults = default_keybinds_for_platform(platform);
             assert!(
                 defaults.iter().any(|binding| {
-                    binding.trigger == "secondary-w"
-                        && binding.action == CommandId::ClosePaneOrTab
+                    binding.trigger == "secondary-w" && binding.action == CommandId::ClosePaneOrTab
                 }),
                 "missing secondary-w -> close_pane_or_tab on {}",
                 platform.as_str()
@@ -469,8 +468,7 @@ mod tests {
             );
             assert!(
                 defaults.iter().any(|binding| {
-                    binding.trigger == "secondary-o"
-                        && binding.action == CommandId::FocusPaneNext
+                    binding.trigger == "secondary-o" && binding.action == CommandId::FocusPaneNext
                 }),
                 "missing secondary-o -> focus_pane_next on {}",
                 platform.as_str()
@@ -484,8 +482,7 @@ mod tests {
             let defaults = default_keybinds_for_platform(platform);
             assert!(
                 !defaults.iter().any(|binding| {
-                    binding.trigger == "secondary-shift-w"
-                        && binding.action == CommandId::ClosePane
+                    binding.trigger == "secondary-shift-w" && binding.action == CommandId::ClosePane
                 }),
                 "unexpected secondary-shift-w -> close_pane on {}",
                 platform.as_str()

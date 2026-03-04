@@ -634,7 +634,9 @@ impl TerminalGrid {
             }
 
             Self::push_pending_text_batch(&mut current, &mut ops);
-            current = Some(TextBatch::new(cell.col, cell.row, cell.char, key, underline));
+            current = Some(TextBatch::new(
+                cell.col, cell.row, cell.char, key, underline,
+            ));
         }
 
         Self::push_pending_text_batch(&mut current, &mut ops);
@@ -664,6 +666,7 @@ impl TerminalGrid {
         ));
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn paint_cached_row_ops(
         &self,
         row: usize,
@@ -757,7 +760,8 @@ impl TerminalGrid {
         let style_changed = cache.style_key.as_ref() != Some(&style_key);
         cache.style_key = Some(style_key);
 
-        let mut full_repaint = style_changed || matches!(self.paint_damage, TerminalGridPaintDamage::Full);
+        let mut full_repaint =
+            style_changed || matches!(self.paint_damage, TerminalGridPaintDamage::Full);
         let mut rows = Vec::new();
         if let TerminalGridPaintDamage::Rows(damaged_rows) = &self.paint_damage {
             rows.extend(damaged_rows.iter().copied().filter(|row| *row < self.rows));
@@ -796,12 +800,7 @@ impl TerminalGrid {
         (full_repaint, sorted_dedup_rows(rows))
     }
 
-    fn paint_cursor_for_row(
-        &self,
-        row: usize,
-        origin: gpui::Point<Pixels>,
-        window: &mut Window,
-    ) {
+    fn paint_cursor_for_row(&self, row: usize, origin: gpui::Point<Pixels>, window: &mut Window) {
         let Some((cursor_col, cursor_row)) = self.cursor_cell else {
             return;
         };
@@ -967,17 +966,18 @@ impl TerminalGrid {
     }
 
     fn cell_underline(&self, row: usize, col: usize, color: Hsla) -> Option<UnderlineStyle> {
-        self.hovered_link_range.and_then(|(link_row, start_col, end_col)| {
-            if row == link_row && col >= start_col && col <= end_col {
-                Some(UnderlineStyle {
-                    thickness: px(1.0),
-                    color: Some(color),
-                    wavy: false,
-                })
-            } else {
-                None
-            }
-        })
+        self.hovered_link_range
+            .and_then(|(link_row, start_col, end_col)| {
+                if row == link_row && col >= start_col && col <= end_col {
+                    Some(UnderlineStyle {
+                        thickness: px(1.0),
+                        color: Some(color),
+                        wavy: false,
+                    })
+                } else {
+                    None
+                }
+            })
     }
 
     fn push_pending_text_batch(current: &mut Option<TextBatch>, ops: &mut Vec<TextDrawOp>) {
@@ -1027,7 +1027,9 @@ impl TerminalGrid {
             }
 
             Self::push_pending_text_batch(&mut current, &mut ops);
-            current = Some(TextBatch::new(cell.col, cell.row, cell.char, key, underline));
+            current = Some(TextBatch::new(
+                cell.col, cell.row, cell.char, key, underline,
+            ));
         }
 
         Self::push_pending_text_batch(&mut current, &mut ops);
@@ -1060,7 +1062,10 @@ mod tests {
         }
     }
 
-    fn test_grid(cells: Vec<CellRenderInfo>, hovered: Option<(usize, usize, usize)>) -> TerminalGrid {
+    fn test_grid(
+        cells: Vec<CellRenderInfo>,
+        hovered: Option<(usize, usize, usize)>,
+    ) -> TerminalGrid {
         TerminalGrid {
             cells: Arc::new(vec![Arc::new(cells)]),
             paint_cache: TerminalGridPaintCacheHandle::default(),
@@ -1205,7 +1210,11 @@ mod tests {
     #[test]
     fn batches_split_on_hover_underline_boundary() {
         let grid = test_grid(
-            vec![test_cell(0, 0, 'a'), test_cell(1, 0, 'b'), test_cell(2, 0, 'c')],
+            vec![
+                test_cell(0, 0, 'a'),
+                test_cell(1, 0, 'b'),
+                test_cell(2, 0, 'c'),
+            ],
             Some((0, 1, 2)),
         );
         let batches = collect_batches(&grid);
@@ -1242,7 +1251,11 @@ mod tests {
     #[test]
     fn batches_do_not_include_block_element_glyphs() {
         let grid = test_grid(
-            vec![test_cell(0, 0, 'a'), test_cell(1, 0, '\u{2588}'), test_cell(2, 0, 'b')],
+            vec![
+                test_cell(0, 0, 'a'),
+                test_cell(1, 0, '\u{2588}'),
+                test_cell(2, 0, 'b'),
+            ],
             None,
         );
         let batches = collect_batches(&grid);
@@ -1255,7 +1268,10 @@ mod tests {
     fn batches_break_around_wide_char_spacer_boundaries() {
         let mut spacer = test_cell(1, 0, ' ');
         spacer.render_text = false;
-        let grid = test_grid(vec![test_cell(0, 0, '你'), spacer, test_cell(2, 0, 'x')], None);
+        let grid = test_grid(
+            vec![test_cell(0, 0, '你'), spacer, test_cell(2, 0, 'x')],
+            None,
+        );
         let batches = collect_batches(&grid);
         assert_eq!(batches.len(), 2);
         assert_eq!(batches[0].text, "你");
@@ -1265,7 +1281,11 @@ mod tests {
     #[test]
     fn draw_ops_interleave_text_and_block_in_cell_order() {
         let grid = test_grid(
-            vec![test_cell(0, 0, 'a'), test_cell(1, 0, '\u{2588}'), test_cell(2, 0, 'b')],
+            vec![
+                test_cell(0, 0, 'a'),
+                test_cell(1, 0, '\u{2588}'),
+                test_cell(2, 0, 'b'),
+            ],
             None,
         );
         let ops = collect_draw_ops(&grid);
@@ -1331,7 +1351,9 @@ mod tests {
         );
         let ops = collect_draw_ops(&grid);
         assert_eq!(ops.len(), 4);
-        assert!(matches!(&ops[0], TextDrawOp::Batch(batch) if batch.text == "ab" && batch.row == 0));
+        assert!(
+            matches!(&ops[0], TextDrawOp::Batch(batch) if batch.text == "ab" && batch.row == 0)
+        );
         assert!(matches!(&ops[1], TextDrawOp::Batch(batch) if batch.text == "c" && batch.row == 1));
         assert!(matches!(&ops[2], TextDrawOp::Block(block) if block.row == 1 && block.col == 1));
         assert!(matches!(&ops[3], TextDrawOp::Batch(batch) if batch.text == "d" && batch.row == 1));

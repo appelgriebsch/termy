@@ -53,10 +53,10 @@ fn append_menu_entries(
             continue;
         };
 
-        if let Some(section) = previous_section {
-            if section != entry.section {
-                items.push(MenuItem::separator());
-            }
+        if let Some(section) = previous_section
+            && section != entry.section
+        {
+            items.push(MenuItem::separator());
         }
 
         items.push(entry.action.to_menu_item(title, entry.role));

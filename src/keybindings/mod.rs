@@ -187,8 +187,10 @@ mod tests {
 
     #[test]
     fn resolved_keybinds_match_command_core_for_same_fixture() {
-        let mut config = AppConfig::default();
-        config.keybind_lines = fixture_keybind_lines();
+        let config = AppConfig {
+            keybind_lines: fixture_keybind_lines(),
+            ..Default::default()
+        };
 
         let (resolved_from_gui, warnings) = resolve_keybinds_for_config(&config, true);
         assert!(warnings.is_empty());
@@ -208,8 +210,10 @@ mod tests {
 
     #[test]
     fn resolved_keybinds_use_canonicalized_triggers() {
-        let mut config = AppConfig::default();
-        config.keybind_lines = fixture_keybind_lines();
+        let config = AppConfig {
+            keybind_lines: fixture_keybind_lines(),
+            ..Default::default()
+        };
 
         let (resolved, warnings) = resolve_keybinds_for_config(&config, true);
         assert!(warnings.is_empty());
@@ -320,17 +324,19 @@ mod tests {
 
     #[test]
     fn keybind_resolution_keeps_non_tmux_actions_when_tmux_disabled() {
-        let mut config = AppConfig::default();
-        config.keybind_lines = vec![
-            KeybindConfigLine {
-                line_number: 1,
-                value: "clear".to_string(),
-            },
-            KeybindConfigLine {
-                line_number: 10,
-                value: "secondary-d=split_pane_vertical".to_string(),
-            },
-        ];
+        let config = AppConfig {
+            keybind_lines: vec![
+                KeybindConfigLine {
+                    line_number: 1,
+                    value: "clear".to_string(),
+                },
+                KeybindConfigLine {
+                    line_number: 10,
+                    value: "secondary-d=split_pane_vertical".to_string(),
+                },
+            ],
+            ..Default::default()
+        };
 
         let (resolved, warnings) = resolve_keybinds_for_config(&config, false);
         assert!(warnings.is_empty());

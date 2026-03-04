@@ -221,7 +221,7 @@ impl TerminalView {
                 let size = self
                     .active_terminal()
                     .map(|terminal| terminal.size())
-                    .unwrap_or_else(TerminalSize::default);
+                    .unwrap_or_default();
                 let terminal = match Terminal::new_native(
                     size,
                     self.configured_working_dir.as_deref(),

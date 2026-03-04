@@ -3,27 +3,22 @@ use flume::{Receiver, RecvTimeoutError, Sender};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+#[cfg(test)]
+use super::command::split_control_completion_token;
 use super::command::{
-    SEND_INPUT_BULK_HEX_BYTES, SEND_INPUT_CHUNKED_HEX_BYTES, SendInputMode,
-    choose_send_input_mode, next_control_completion_token, send_keys_hex_command,
-    tmux_command_line,
+    SEND_INPUT_BULK_HEX_BYTES, SEND_INPUT_CHUNKED_HEX_BYTES, SendInputMode, choose_send_input_mode,
+    next_control_completion_token, send_keys_hex_command, tmux_command_line,
 };
-use super::control::{
-    ControlRequest, NotificationCoalescer, try_enqueue_control_request,
-};
+use super::control::{ControlRequest, NotificationCoalescer, try_enqueue_control_request};
 #[cfg(unix)]
 use super::control::{
     FATAL_EXIT_QUEUE_BOUND, NOTIFICATION_QUEUE_BOUND, PENDING_QUEUE_BOUND, REQUEST_QUEUE_BOUND,
     spawn_control_threads,
 };
-use super::launch::{
-    SessionLaunchPlan, managed_session_window_option_override_commands,
-};
 #[cfg(unix)]
 use super::launch::spawn_tmux_control_mode;
-use super::payload::{
-    capture_full_pane_args, sanitize_tmux_payload, unescape_tmux_payload,
-};
+use super::launch::{SessionLaunchPlan, managed_session_window_option_override_commands};
+use super::payload::{capture_full_pane_args, sanitize_tmux_payload, unescape_tmux_payload};
 use super::session::{self, run_tmux_command_with_socket};
 use super::shutdown::{
     is_tmux_missing_client_error, is_tmux_no_server_error, normalize_shutdown_teardown_result,
@@ -34,8 +29,6 @@ use super::types::{
     TmuxControlError, TmuxLaunchTarget, TmuxNotification, TmuxRuntimeConfig, TmuxSessionSummary,
     TmuxShutdownMode, TmuxSnapshot, TmuxSocketTarget,
 };
-#[cfg(test)]
-use super::command::split_control_completion_token;
 
 pub struct TmuxClient {
     tmux_binary: String,
@@ -64,8 +57,7 @@ impl TmuxClient {
         event_wakeup_tx: Option<Sender<()>>,
     ) -> Result<Self> {
         let launch_plan = Self::launch_plan(&config);
-        let enforce_managed_session_ui =
-            matches!(&config.launch, TmuxLaunchTarget::Managed { .. });
+        let enforce_managed_session_ui = matches!(&config.launch, TmuxLaunchTarget::Managed { .. });
         if launch_plan.session_name.trim().is_empty() {
             return Err(anyhow!("tmux session name cannot be empty"));
         }
@@ -81,7 +73,8 @@ impl TmuxClient {
         let (pending_tx, pending_rx) = flume::bounded(PENDING_QUEUE_BOUND);
         let (notifications_tx, notifications_rx) =
             flume::bounded::<TmuxNotification>(NOTIFICATION_QUEUE_BOUND);
-        let (fatal_exit_tx, fatal_exit_rx) = flume::bounded::<Option<String>>(FATAL_EXIT_QUEUE_BOUND);
+        let (fatal_exit_tx, fatal_exit_rx) =
+            flume::bounded::<Option<String>>(FATAL_EXIT_QUEUE_BOUND);
         let control_client_pid = child.id();
 
         spawn_control_threads(
@@ -124,7 +117,9 @@ impl TmuxClient {
         event_wakeup_tx: Option<Sender<()>>,
     ) -> Result<Self> {
         let _ = (config, cols, rows, event_wakeup_tx);
-        Err(anyhow!("tmux control mode is only supported on unix targets"))
+        Err(anyhow!(
+            "tmux control mode is only supported on unix targets"
+        ))
     }
 
     pub fn set_client_size(&self, cols: u16, rows: u16) -> Result<()> {
@@ -204,11 +199,7 @@ impl TmuxClient {
     }
 
     pub fn previous_window(&self) -> Result<()> {
-        self.run_control_status_args(&[
-            "previous-window",
-            "-t",
-            self.session_name.as_str(),
-        ])
+        self.run_control_status_args(&["previous-window", "-t", self.session_name.as_str()])
     }
 
     pub fn next_window(&self) -> Result<()> {
@@ -436,9 +427,7 @@ impl TmuxClient {
         let args = capture_full_pane_args(pane_id, start_row.as_str());
         let out = self.run_control_capture_args(&args)?;
         let payload = trim_trailing_line_terminators(out.as_bytes());
-        Ok(sanitize_tmux_payload(unescape_tmux_payload(
-            payload,
-        )))
+        Ok(sanitize_tmux_payload(unescape_tmux_payload(payload)))
     }
 
     pub fn verify_tmux_version(binary: &str, minimum_major: u8, minimum_minor: u8) -> Result<()> {
@@ -466,7 +455,11 @@ impl TmuxClient {
         )
     }
 
-    pub fn kill_session(binary: &str, socket_target: TmuxSocketTarget, session_name: &str) -> Result<()> {
+    pub fn kill_session(
+        binary: &str,
+        socket_target: TmuxSocketTarget,
+        session_name: &str,
+    ) -> Result<()> {
         session::kill_session(binary, socket_target, session_name)
     }
 
@@ -512,7 +505,10 @@ impl TmuxClient {
         response.map_err(anyhow::Error::new)
     }
 
-    fn send_control_command_wait(&self, command: &str) -> Result<super::control::ControlCommandResult> {
+    fn send_control_command_wait(
+        &self,
+        command: &str,
+    ) -> Result<super::control::ControlCommandResult> {
         const CONTROL_COMMAND_TIMEOUT: Duration = Duration::from_secs(3);
         self.send_control_command_wait_with_timeout(command, CONTROL_COMMAND_TIMEOUT)
     }
@@ -564,14 +560,8 @@ impl TmuxClient {
             "TERMY_TAB_TITLE_PREFIX",
         ])
         .context("failed to clear termy shell title prefix env in tmux session")?;
-        self.run_control_status_args(&[
-            "set-environment",
-            "-t",
-            session,
-            "PROMPT_EOL_MARK",
-            "",
-        ])
-        .context("failed to disable zsh prompt eol mark env in tmux session")?;
+        self.run_control_status_args(&["set-environment", "-t", session, "PROMPT_EOL_MARK", ""])
+            .context("failed to disable zsh prompt eol mark env in tmux session")?;
 
         self.run_control_status_args(&["set-option", "-q", "-t", session, "status", "off"])
             .context("failed to disable tmux status line for managed session")?;
@@ -772,7 +762,10 @@ mod tests {
         let token = "__termy_cmd_done_77";
         let partial = "row-1\nrow-2";
         let full = format!("{partial}\n{token}");
-        assert_eq!(split_control_completion_token(full.as_str(), token), Some(partial.to_string()));
+        assert_eq!(
+            split_control_completion_token(full.as_str(), token),
+            Some(partial.to_string())
+        );
         assert_eq!(split_control_completion_token(partial, token), None);
     }
 
@@ -787,9 +780,21 @@ mod tests {
             .expect("coalescer should survive oversized burst");
 
         let drained = coalescer.drain();
-        assert!(drained.iter().any(|n| matches!(n, TmuxNotification::NeedsRefresh)));
-        assert!(drained.iter().any(|n| matches!(n, TmuxNotification::Warning(_))));
-        assert!(!drained.iter().any(|n| matches!(n, TmuxNotification::Exit(_))));
+        assert!(
+            drained
+                .iter()
+                .any(|n| matches!(n, TmuxNotification::NeedsRefresh))
+        );
+        assert!(
+            drained
+                .iter()
+                .any(|n| matches!(n, TmuxNotification::Warning(_)))
+        );
+        assert!(
+            !drained
+                .iter()
+                .any(|n| matches!(n, TmuxNotification::Exit(_)))
+        );
     }
 
     #[test]
@@ -807,8 +812,13 @@ mod tests {
     #[cfg(not(unix))]
     #[test]
     fn new_reports_unsupported_platform_on_non_unix() {
-        let error = TmuxClient::new(TmuxRuntimeConfig::default(), 120, 40, None::<flume::Sender<()>>)
-            .expect_err("non-unix targets must reject tmux runtime startup");
+        let error = TmuxClient::new(
+            TmuxRuntimeConfig::default(),
+            120,
+            40,
+            None::<flume::Sender<()>>,
+        )
+        .expect_err("non-unix targets must reject tmux runtime startup");
         assert!(
             error
                 .to_string()

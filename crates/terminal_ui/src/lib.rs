@@ -1,8 +1,8 @@
 mod grid;
 mod links;
 mod locale;
-mod path_env;
 mod pane_terminal;
+mod path_env;
 mod render_metrics;
 mod runtime;
 mod tmux;
@@ -26,6 +26,5 @@ pub use runtime::{
 };
 pub use tmux::{
     TmuxClient, TmuxLaunchTarget, TmuxNotification, TmuxPaneState, TmuxRuntimeConfig,
-    TmuxShutdownMode,
-    TmuxSessionSummary, TmuxSnapshot, TmuxSocketTarget, TmuxWindowState,
+    TmuxSessionSummary, TmuxShutdownMode, TmuxSnapshot, TmuxSocketTarget, TmuxWindowState,
 };

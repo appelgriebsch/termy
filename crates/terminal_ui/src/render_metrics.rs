@@ -12,8 +12,12 @@ pub struct TerminalUiRenderMetricsSnapshot {
 impl TerminalUiRenderMetricsSnapshot {
     pub fn saturating_sub(self, previous: Self) -> Self {
         Self {
-            grid_paint_count: self.grid_paint_count.saturating_sub(previous.grid_paint_count),
-            shape_line_calls: self.shape_line_calls.saturating_sub(previous.shape_line_calls),
+            grid_paint_count: self
+                .grid_paint_count
+                .saturating_sub(previous.grid_paint_count),
+            shape_line_calls: self
+                .shape_line_calls
+                .saturating_sub(previous.shape_line_calls),
         }
     }
 }
@@ -68,7 +72,10 @@ mod tests {
     #[test]
     fn snapshot_is_zero_after_reset() {
         terminal_ui_render_metrics_reset();
-        assert_eq!(terminal_ui_render_metrics_snapshot(), TerminalUiRenderMetricsSnapshot::default());
+        assert_eq!(
+            terminal_ui_render_metrics_snapshot(),
+            TerminalUiRenderMetricsSnapshot::default()
+        );
     }
 
     #[test]
@@ -96,6 +103,9 @@ mod tests {
         increment_grid_paint_count();
         increment_shape_line_calls();
         terminal_ui_render_metrics_reset();
-        assert_eq!(terminal_ui_render_metrics_snapshot(), TerminalUiRenderMetricsSnapshot::default());
+        assert_eq!(
+            terminal_ui_render_metrics_snapshot(),
+            TerminalUiRenderMetricsSnapshot::default()
+        );
     }
 }

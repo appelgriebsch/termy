@@ -140,8 +140,7 @@ fn paint_damage_from_dirty_spans(
     spans: &[TerminalDirtySpan],
     row_count: usize,
 ) -> TerminalGridPaintDamage {
-    let mut rows = Vec::new();
-    rows.reserve(spans.len());
+    let mut rows = Vec::with_capacity(spans.len());
     for span in spans {
         if span.row < row_count {
             rows.push(span.row);
@@ -570,6 +569,7 @@ impl TerminalView {
         Arc::new(rows_cache.into_iter().map(Arc::new).collect())
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn patch_pane_render_cache(
         &self,
         terminal: &Terminal,
@@ -636,6 +636,7 @@ impl TerminalView {
         (patched_cell_count, false)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn update_pane_render_cache(
         &self,
         terminal: &Terminal,
@@ -646,7 +647,11 @@ impl TerminalView {
         cache_key: TerminalPaneRenderCacheKey,
         context: PaneCellBuildContext<'_>,
         #[cfg(debug_assertions)] render_pass_cache_counts: &mut RenderPassCacheStrategyCounts,
-    ) -> (PaneRenderCells, PaneCacheUpdateStrategy, TerminalGridPaintDamage) {
+    ) -> (
+        PaneRenderCells,
+        PaneCacheUpdateStrategy,
+        TerminalGridPaintDamage,
+    ) {
         let damage = terminal.take_damage_snapshot();
         let mut strategy = pane_cache_update_strategy(
             !cache.cells.is_empty(),
@@ -659,7 +664,9 @@ impl TerminalView {
             PaneCacheUpdateStrategy::Reuse => TerminalGridPaintDamage::None,
             PaneCacheUpdateStrategy::Full => TerminalGridPaintDamage::Full,
             PaneCacheUpdateStrategy::Partial => match &damage {
-                TerminalDamageSnapshot::Partial(spans) => paint_damage_from_dirty_spans(spans, rows),
+                TerminalDamageSnapshot::Partial(spans) => {
+                    paint_damage_from_dirty_spans(spans, rows)
+                }
                 TerminalDamageSnapshot::Full => TerminalGridPaintDamage::Full,
             },
         };
@@ -718,6 +725,7 @@ impl TerminalView {
         (cache.cells.clone(), strategy, paint_damage)
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build_terminal_grid_from_cache(
         &self,
         cells: PaneRenderCells,
@@ -1754,37 +1762,39 @@ impl Render for TerminalView {
                 let pane_right_cells = u32::from(pane.left).saturating_add(u32::from(pane.width));
                 let pane_bottom_cells = u32::from(pane.top).saturating_add(u32::from(pane.height));
 
-                if multi_pane && pane_right_cells < max_right_cells {
-                    if let Some(gap_cells) = Self::pane_right_gap_cells(pane, &active_tab.panes) {
-                        let gap_px = (gap_cells as f32) * cell_width;
-                        let divider_left = pane_frame_left + pane_frame_width + (gap_px * 0.5) - 0.5;
-                        pane_dividers.push(
-                            div()
-                                .absolute()
-                                .left(px(divider_left))
-                                .top(px(pane_frame_top))
-                                .w(px(1.0))
-                                .h(px(pane_frame_height))
-                                .bg(divider_color)
-                                .into_any_element(),
-                        );
-                    }
+                if multi_pane
+                    && pane_right_cells < max_right_cells
+                    && let Some(gap_cells) = Self::pane_right_gap_cells(pane, &active_tab.panes)
+                {
+                    let gap_px = (gap_cells as f32) * cell_width;
+                    let divider_left = pane_frame_left + pane_frame_width + (gap_px * 0.5) - 0.5;
+                    pane_dividers.push(
+                        div()
+                            .absolute()
+                            .left(px(divider_left))
+                            .top(px(pane_frame_top))
+                            .w(px(1.0))
+                            .h(px(pane_frame_height))
+                            .bg(divider_color)
+                            .into_any_element(),
+                    );
                 }
-                if multi_pane && pane_bottom_cells < max_bottom_cells {
-                    if let Some(gap_cells) = Self::pane_bottom_gap_cells(pane, &active_tab.panes) {
-                        let gap_px = (gap_cells as f32) * cell_height;
-                        let divider_top = pane_frame_top + pane_frame_height + (gap_px * 0.5) - 0.5;
-                        pane_dividers.push(
-                            div()
-                                .absolute()
-                                .left(px(pane_frame_left))
-                                .top(px(divider_top))
-                                .w(px(pane_frame_width))
-                                .h(px(1.0))
-                                .bg(divider_color)
-                                .into_any_element(),
-                        );
-                    }
+                if multi_pane
+                    && pane_bottom_cells < max_bottom_cells
+                    && let Some(gap_cells) = Self::pane_bottom_gap_cells(pane, &active_tab.panes)
+                {
+                    let gap_px = (gap_cells as f32) * cell_height;
+                    let divider_top = pane_frame_top + pane_frame_height + (gap_px * 0.5) - 0.5;
+                    pane_dividers.push(
+                        div()
+                            .absolute()
+                            .left(px(pane_frame_left))
+                            .top(px(divider_top))
+                            .w(px(pane_frame_width))
+                            .h(px(1.0))
+                            .bg(divider_color)
+                            .into_any_element(),
+                    );
                 }
 
                 pane_layers.push(

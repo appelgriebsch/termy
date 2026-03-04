@@ -114,10 +114,7 @@ impl TerminalView {
     }
 
     pub(crate) fn should_seed_predicted_prompt_title(tab_title: &TabTitleConfig) -> bool {
-        tab_title
-            .priority
-            .iter()
-            .any(|source| *source == TabTitleSource::Explicit)
+        tab_title.priority.contains(&TabTitleSource::Explicit)
     }
 
     pub(crate) fn predicted_prompt_seed_title(
@@ -212,8 +209,7 @@ impl TerminalView {
     pub(crate) fn resolved_tab_title(&self, index: usize) -> String {
         let tab = &self.tabs[index];
         let fallback_title = self.fallback_title();
-        let smart_mode_shell_fallback =
-            Self::smart_mode_shell_fallback_enabled(&self.tab_title);
+        let smart_mode_shell_fallback = Self::smart_mode_shell_fallback_enabled(&self.tab_title);
 
         for source in &self.tab_title.priority {
             let candidate = Self::title_source_candidate(
@@ -349,8 +345,10 @@ mod tests {
 
     #[test]
     fn predicted_prompt_seed_title_skips_static_only_priority() {
-        let mut config = TabTitleConfig::default();
-        config.priority = vec![TabTitleSource::Manual, TabTitleSource::Fallback];
+        let config = TabTitleConfig {
+            priority: vec![TabTitleSource::Manual, TabTitleSource::Fallback],
+            ..Default::default()
+        };
 
         let title = TerminalView::predicted_prompt_seed_title(&config, Some("~/projects/termy"));
         assert!(title.is_none());
@@ -358,8 +356,10 @@ mod tests {
 
     #[test]
     fn predicted_prompt_seed_title_ignores_empty_resolved_output() {
-        let mut config = TabTitleConfig::default();
-        config.prompt_format = "{cwd}".to_string();
+        let config = TabTitleConfig {
+            prompt_format: "{cwd}".to_string(),
+            ..Default::default()
+        };
 
         let title = TerminalView::predicted_prompt_seed_title(&config, None);
         assert!(title.is_none());
@@ -367,8 +367,10 @@ mod tests {
 
     #[test]
     fn smart_mode_shell_fallback_enabled_when_shell_integration_is_off() {
-        let mut config = TabTitleConfig::default();
-        config.shell_integration = false;
+        let config = TabTitleConfig {
+            shell_integration: false,
+            ..Default::default()
+        };
         assert!(TerminalView::smart_mode_shell_fallback_enabled(&config));
     }
 
@@ -380,9 +382,11 @@ mod tests {
 
     #[test]
     fn smart_mode_shell_fallback_disabled_for_non_smart_mode() {
-        let mut config = TabTitleConfig::default();
-        config.mode = termy_config_core::TabTitleMode::Shell;
-        config.shell_integration = false;
+        let config = TabTitleConfig {
+            mode: termy_config_core::TabTitleMode::Shell,
+            shell_integration: false,
+            ..Default::default()
+        };
         assert!(!TerminalView::smart_mode_shell_fallback_enabled(&config));
     }
 
@@ -444,8 +448,10 @@ mod tests {
 
     #[test]
     fn derive_tmux_shell_title_uses_prompt_format_for_shell_commands() {
-        let mut tab_title = TabTitleConfig::default();
-        tab_title.prompt_format = "cwd:{cwd}".to_string();
+        let tab_title = TabTitleConfig {
+            prompt_format: "cwd:{cwd}".to_string(),
+            ..Default::default()
+        };
         let pane = pane_with("/tmp/work", "zsh");
 
         let title = TerminalView::derive_tmux_shell_title(&tab_title, &pane);
@@ -454,8 +460,10 @@ mod tests {
 
     #[test]
     fn derive_tmux_shell_title_uses_command_format_for_non_shell_commands() {
-        let mut tab_title = TabTitleConfig::default();
-        tab_title.command_format = "run:{command}".to_string();
+        let tab_title = TabTitleConfig {
+            command_format: "run:{command}".to_string(),
+            ..Default::default()
+        };
         let pane = pane_with("/tmp/work", "sleep");
 
         let title = TerminalView::derive_tmux_shell_title(&tab_title, &pane);
@@ -464,8 +472,10 @@ mod tests {
 
     #[test]
     fn derive_tmux_shell_title_returns_none_when_resolved_title_is_empty() {
-        let mut tab_title = TabTitleConfig::default();
-        tab_title.command_format = " ".to_string();
+        let tab_title = TabTitleConfig {
+            command_format: " ".to_string(),
+            ..Default::default()
+        };
         let pane = pane_with("/tmp/work", "sleep");
 
         let title = TerminalView::derive_tmux_shell_title(&tab_title, &pane);

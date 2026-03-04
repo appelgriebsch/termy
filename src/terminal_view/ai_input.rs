@@ -191,11 +191,11 @@ impl TerminalView {
         termy_toast::success(format!("AI: {}", display));
 
         // Write to terminal input buffer (as if user typed it)
-        if let Some(tab) = self.tabs.get(self.active_tab) {
-            if let Some(terminal) = tab.active_terminal() {
-                // Write the response as input to the terminal
-                terminal.write_input(cleaned.as_bytes());
-            }
+        if let Some(tab) = self.tabs.get(self.active_tab)
+            && let Some(terminal) = tab.active_terminal()
+        {
+            // Write the response as input to the terminal
+            terminal.write_input(cleaned.as_bytes());
         }
 
         cx.notify();
@@ -311,9 +311,7 @@ fn extract_line_text_for_ai(
     for col in 0..cols {
         let cell = &grid[line][Column(col)];
         let c = cell.c;
-        if c == '\0' || cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
-            text.push(' ');
-        } else if c.is_control() {
+        if c == '\0' || cell.flags.contains(Flags::WIDE_CHAR_SPACER) || c.is_control() {
             text.push(' ');
         } else {
             text.push(c);

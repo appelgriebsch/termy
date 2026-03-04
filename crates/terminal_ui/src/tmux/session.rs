@@ -1,17 +1,17 @@
-use anyhow::{Context, Result, anyhow};
 #[cfg(unix)]
 use crate::locale::{Utf8LocaleOverridePlan, preferred_utf8_locale, utf8_locale_override_plan};
 #[cfg(unix)]
 use crate::path_env::normalized_path_env;
+use anyhow::{Context, Result, anyhow};
 #[cfg(unix)]
 use std::env;
 use std::process::Command;
 
+#[cfg(test)]
+use super::command::quote_tmux_arg;
 use super::command::tmux_command_line;
 use super::snapshot::{parse_session_summaries, session_snapshot_format};
 use super::types::{TmuxSessionSummary, TmuxSocketTarget};
-#[cfg(test)]
-use super::command::quote_tmux_arg;
 
 pub(crate) fn append_socket_args(command: &mut Command, socket_target: &TmuxSocketTarget) {
     if let Some(socket_name) = socket_target.socket_name() {
@@ -75,7 +75,11 @@ pub(crate) fn run_tmux_command_with_socket(
     Ok(output)
 }
 
-pub(crate) fn verify_tmux_version(binary: &str, minimum_major: u8, minimum_minor: u8) -> Result<()> {
+pub(crate) fn verify_tmux_version(
+    binary: &str,
+    minimum_major: u8,
+    minimum_minor: u8,
+) -> Result<()> {
     let mut command = Command::new(binary);
     normalize_tmux_command_env(&mut command);
     let output = command
@@ -111,17 +115,14 @@ pub(crate) fn list_sessions(
     socket_target: TmuxSocketTarget,
 ) -> Result<Vec<TmuxSessionSummary>> {
     let format = session_snapshot_format();
-    let output = run_tmux_command_with_socket(
-        binary,
-        &socket_target,
-        &["list-sessions", "-F", format],
-    )
-    .with_context(|| {
-        format!(
-            "tmux session listing failed: {}",
-            tmux_command_line(&["list-sessions", "-F", format])
-        )
-    })?;
+    let output =
+        run_tmux_command_with_socket(binary, &socket_target, &["list-sessions", "-F", format])
+            .with_context(|| {
+                format!(
+                    "tmux session listing failed: {}",
+                    tmux_command_line(&["list-sessions", "-F", format])
+                )
+            })?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     parse_session_summaries(stdout.as_ref())
 }
@@ -145,30 +146,48 @@ pub(crate) fn rename_session(
     run_tmux_command_with_socket(
         binary,
         &socket_target,
-        &["rename-session", "-t", current_session_name, next_session_name],
+        &[
+            "rename-session",
+            "-t",
+            current_session_name,
+            next_session_name,
+        ],
     )
     .with_context(|| {
         format!(
             "tmux session rename failed: {}",
-            tmux_command_line(&["rename-session", "-t", current_session_name, next_session_name])
+            tmux_command_line(&[
+                "rename-session",
+                "-t",
+                current_session_name,
+                next_session_name
+            ])
         )
     })?;
     Ok(())
 }
 
-pub(crate) fn kill_session(binary: &str, socket_target: TmuxSocketTarget, session_name: &str) -> Result<()> {
+pub(crate) fn kill_session(
+    binary: &str,
+    socket_target: TmuxSocketTarget,
+    session_name: &str,
+) -> Result<()> {
     let session_name = session_name.trim();
     if session_name.is_empty() {
         return Err(anyhow!("tmux session name cannot be empty"));
     }
 
-    run_tmux_command_with_socket(binary, &socket_target, &["kill-session", "-t", session_name])
-        .with_context(|| {
-            format!(
-                "tmux session kill failed: {}",
-                tmux_command_line(&["kill-session", "-t", session_name])
-            )
-        })?;
+    run_tmux_command_with_socket(
+        binary,
+        &socket_target,
+        &["kill-session", "-t", session_name],
+    )
+    .with_context(|| {
+        format!(
+            "tmux session kill failed: {}",
+            tmux_command_line(&["kill-session", "-t", session_name])
+        )
+    })?;
     Ok(())
 }
 
@@ -198,26 +217,16 @@ mod tests {
 
     #[test]
     fn rename_session_rejects_empty_session_names() {
-        let empty_current = rename_session(
-            "tmux",
-            TmuxSocketTarget::Default,
-            " ",
-            "next",
-        )
-        .expect_err("expected empty current session name failure");
+        let empty_current = rename_session("tmux", TmuxSocketTarget::Default, " ", "next")
+            .expect_err("expected empty current session name failure");
         assert!(
             empty_current
                 .to_string()
                 .contains("tmux current session name cannot be empty")
         );
 
-        let empty_next = rename_session(
-            "tmux",
-            TmuxSocketTarget::Default,
-            "current",
-            " ",
-        )
-        .expect_err("expected empty next session name failure");
+        let empty_next = rename_session("tmux", TmuxSocketTarget::Default, "current", " ")
+            .expect_err("expected empty next session name failure");
         assert!(
             empty_next
                 .to_string()
@@ -229,7 +238,11 @@ mod tests {
     fn kill_session_rejects_empty_session_name() {
         let error = kill_session("tmux", TmuxSocketTarget::Default, " ")
             .expect_err("expected empty session name failure");
-        assert!(error.to_string().contains("tmux session name cannot be empty"));
+        assert!(
+            error
+                .to_string()
+                .contains("tmux session name cannot be empty")
+        );
     }
 
     #[test]
@@ -242,7 +255,10 @@ mod tests {
     #[test]
     fn quote_tmux_arg_preserves_safe_values_without_quotes() {
         assert_eq!(quote_tmux_arg("-L"), "-L");
-        assert_eq!(quote_tmux_arg("name_with-safe.chars"), "name_with-safe.chars");
+        assert_eq!(
+            quote_tmux_arg("name_with-safe.chars"),
+            "name_with-safe.chars"
+        );
     }
 
     #[test]
@@ -309,7 +325,13 @@ mod tests {
         let path = normalized_path_env(Some(raw.as_os_str())).expect("normalized path");
         let parsed = std::env::split_paths(&OsString::from(path)).collect::<Vec<_>>();
         let homebrew_bin = PathBuf::from("/opt/homebrew/bin");
-        assert_eq!(parsed.iter().filter(|entry| **entry == homebrew_bin).count(), 1);
+        assert_eq!(
+            parsed
+                .iter()
+                .filter(|entry| **entry == homebrew_bin)
+                .count(),
+            1
+        );
         assert!(parsed.contains(&PathBuf::from("/opt/homebrew/sbin")));
         assert!(parsed.contains(&PathBuf::from("/usr/local/bin")));
         assert!(parsed.contains(&PathBuf::from("/usr/local/sbin")));

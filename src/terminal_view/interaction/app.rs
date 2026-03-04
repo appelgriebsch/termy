@@ -55,17 +55,15 @@ impl TerminalView {
             let result = config::import_colors_from_json(&path);
 
             let _ = cx.update(|cx| {
-                this.update(cx, |view, cx| {
-                    match result {
-                        Ok(msg) => {
-                            termy_toast::success(msg);
-                            view.reload_config(cx);
-                            cx.notify();
-                        }
-                        Err(err) => {
-                            termy_toast::error(err);
-                            view.notify_overlay(cx);
-                        }
+                this.update(cx, |view, cx| match result {
+                    Ok(msg) => {
+                        termy_toast::success(msg);
+                        view.reload_config(cx);
+                        cx.notify();
+                    }
+                    Err(err) => {
+                        termy_toast::error(err);
+                        view.notify_overlay(cx);
                     }
                 })
             });

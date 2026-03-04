@@ -413,9 +413,7 @@ fn extract_line_text(
     for col in 0..cols {
         let cell = &grid[line][Column(col)];
         let c = cell.c;
-        if c == '\0' || cell.flags.contains(Flags::WIDE_CHAR_SPACER) {
-            text.push(' ');
-        } else if c.is_control() {
+        if c == '\0' || cell.flags.contains(Flags::WIDE_CHAR_SPACER) || c.is_control() {
             text.push(' ');
         } else {
             text.push(c);

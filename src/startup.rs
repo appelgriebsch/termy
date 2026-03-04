@@ -1,4 +1,5 @@
 /// Startup failures that should block app launch with actionable recovery guidance.
+#[allow(clippy::enum_variant_names)]
 pub(crate) enum StartupBlocker {
     TmuxPreflight(String),
     TmuxClientLaunch(String),
@@ -9,8 +10,12 @@ impl StartupBlocker {
     pub(crate) fn message(&self) -> String {
         let (reason, error) = match self {
             Self::TmuxPreflight(error) => ("tmux preflight failed", error.as_str()),
-            Self::TmuxClientLaunch(error) => ("failed to start tmux control runtime", error.as_str()),
-            Self::TmuxInitialSnapshot(error) => ("failed to fetch initial tmux snapshot", error.as_str()),
+            Self::TmuxClientLaunch(error) => {
+                ("failed to start tmux control runtime", error.as_str())
+            }
+            Self::TmuxInitialSnapshot(error) => {
+                ("failed to fetch initial tmux snapshot", error.as_str())
+            }
         };
 
         format!(

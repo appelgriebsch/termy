@@ -10,11 +10,11 @@ use crate::ui::scrollbar::{ScrollbarVisibilityController, ScrollbarVisibilityMod
 use alacritty_terminal::term::cell::Flags;
 use flume::{Sender, bounded};
 use gpui::{
-    AnyElement, App, AsyncApp, ClipboardItem, Context, Element, ExternalPaths, FocusHandle,
-    Focusable, Font, FontWeight, InteractiveElement, IntoElement, KeyDownEvent, MouseButton, Entity,
-    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render,
-    ScrollWheelEvent, SharedString, Size, StatefulInteractiveElement, Styled, TouchPhase,
-    WeakEntity, Window, WindowBackgroundAppearance, div, point, px,
+    AnyElement, App, AsyncApp, ClipboardItem, Context, Element, Entity, ExternalPaths, FocusHandle,
+    Focusable, Font, FontWeight, InteractiveElement, IntoElement, KeyDownEvent, MouseButton,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, Render, ScrollWheelEvent,
+    SharedString, Size, StatefulInteractiveElement, Styled, TouchPhase, WeakEntity, Window,
+    WindowBackgroundAppearance, div, point, px,
 };
 use std::{
     cell::RefCell,
@@ -28,9 +28,9 @@ use termy_search::SearchState;
 use termy_terminal_ui::{
     CellRenderInfo, PaneTerminal, TabTitleShellIntegration, Terminal as NativeTerminal,
     TerminalCursorStyle, TerminalDamageSnapshot, TerminalDirtySpan, TerminalEvent, TerminalGrid,
-    TerminalGridPaintCacheHandle, TerminalGridPaintDamage, TerminalGridRows,
-    TerminalRuntimeConfig, TerminalSize, TmuxLaunchTarget,
-    WorkingDirFallback as RuntimeWorkingDirFallback, find_link_in_line, keystroke_to_input,
+    TerminalGridPaintCacheHandle, TerminalGridPaintDamage, TerminalGridRows, TerminalRuntimeConfig,
+    TerminalSize, TmuxLaunchTarget, WorkingDirFallback as RuntimeWorkingDirFallback,
+    find_link_in_line, keystroke_to_input,
 };
 #[cfg(debug_assertions)]
 use termy_terminal_ui::{
@@ -245,6 +245,7 @@ struct PaneFocusPreset {
     active_border_alpha: f32,
 }
 
+#[allow(clippy::large_enum_variant)]
 enum Terminal {
     Tmux(PaneTerminal),
     Native(Mutex<NativeTerminal>),
@@ -278,10 +279,10 @@ impl Terminal {
     }
 
     fn write_input(&self, input: &[u8]) {
-        if let Self::Native(terminal) = self {
-            if let Ok(terminal) = terminal.lock() {
-                terminal.write(input);
-            }
+        if let Self::Native(terminal) = self
+            && let Ok(terminal) = terminal.lock()
+        {
+            terminal.write(input);
         }
     }
 
@@ -1360,7 +1361,7 @@ impl TerminalView {
 
     fn notify_overlay(&mut self, cx: &mut Context<Self>) {
         let overlay_view = self.ensure_overlay_view(cx);
-        let _ = overlay_view.update(cx, |_overlay_view, cx| {
+        overlay_view.update(cx, |_overlay_view, cx| {
             cx.notify();
         });
     }
@@ -1842,7 +1843,7 @@ impl TerminalView {
             let weak = updater.downgrade();
             cx.spawn(async move |_this: WeakEntity<Self>, cx: &mut AsyncApp| {
                 smol::Timer::after(Duration::from_millis(5000)).await;
-                let _ = cx.update(|cx| AutoUpdater::check(weak, cx));
+                cx.update(|cx| AutoUpdater::check(weak, cx));
             })
             .detach();
             view.auto_updater = Some(updater);
@@ -2418,14 +2419,19 @@ mod tests {
 
     #[test]
     fn runtime_kind_follows_tmux_enabled_flag() {
-        let mut config = AppConfig::default();
-        config.tmux_enabled = false;
+        let config = AppConfig {
+            tmux_enabled: false,
+            ..Default::default()
+        };
         assert_eq!(
             TerminalView::runtime_kind_from_app_config(&config),
             RuntimeKind::Native
         );
 
-        config.tmux_enabled = true;
+        let config = AppConfig {
+            tmux_enabled: true,
+            ..Default::default()
+        };
         #[cfg(not(target_os = "windows"))]
         assert_eq!(
             TerminalView::runtime_kind_from_app_config(&config),

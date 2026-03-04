@@ -86,8 +86,8 @@ pub(crate) fn utf8_locale_override_plan(
     // Follow POSIX locale precedence for classification decisions:
     // LC_ALL overrides LC_CTYPE and LANG; LC_CTYPE overrides LANG.
     // We therefore evaluate UTF-8 status from only the single effective locale.
-    let has_utf8_locale = effective_locale_for_decision(lc_all, lc_ctype, lang)
-        .is_some_and(locale_has_utf8_tag);
+    let has_utf8_locale =
+        effective_locale_for_decision(lc_all, lc_ctype, lang).is_some_and(locale_has_utf8_tag);
     if has_utf8_locale {
         return Utf8LocaleOverridePlan::None;
     }

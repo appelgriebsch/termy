@@ -55,6 +55,7 @@ impl RuntimeKind {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub(super) enum RuntimeState {
     Native,
     Tmux(TmuxRuntime),
@@ -95,12 +96,7 @@ pub(super) struct TmuxRuntime {
 }
 
 impl TmuxRuntime {
-    pub(super) fn new(
-        config: TmuxRuntimeConfig,
-        client: TmuxClient,
-        cols: u16,
-        rows: u16,
-    ) -> Self {
+    pub(super) fn new(config: TmuxRuntimeConfig, client: TmuxClient, cols: u16, rows: u16) -> Self {
         Self {
             config,
             client,

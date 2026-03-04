@@ -93,7 +93,7 @@ where
     let mut previous_line = None;
 
     for line in lines {
-        debug_assert!(previous_line.map_or(true, |previous| previous <= line));
+        debug_assert!(previous_line.is_none_or(|previous| previous <= line));
         previous_line = Some(line);
         let top = marker_top_for_line(line, history_size, viewport_rows, marker_top_limit);
         let bucket = (top / dedupe_bucket_size).round() as i32;

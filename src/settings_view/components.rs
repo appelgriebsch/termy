@@ -154,6 +154,7 @@ impl SettingsWindow {
             })
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn render_setting_row(
         &self,
         search_key: &'static str,
@@ -387,6 +388,7 @@ impl SettingsWindow {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(super) fn editable_row_value_element(
         &self,
         field: EditableField,
@@ -778,7 +780,7 @@ impl SettingsWindow {
                                     .bg(input_bg)
                                     .border_1()
                                     .border_color(if is_active && accent_inner_border {
-                                        accent.into()
+                                        accent
                                     } else {
                                         border_color
                                     })

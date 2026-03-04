@@ -128,7 +128,10 @@ impl TerminalView {
         new_offset - old_offset
     }
 
-    pub(in super::super) fn terminal_scroll_delta_to_lines(&mut self, event: &ScrollWheelEvent) -> i32 {
+    pub(in super::super) fn terminal_scroll_delta_to_lines(
+        &mut self,
+        event: &ScrollWheelEvent,
+    ) -> i32 {
         match event.touch_phase {
             TouchPhase::Started => {
                 self.terminal_scroll_accumulator_y = 0.0;
@@ -164,10 +167,7 @@ impl TerminalView {
         hovered_pane_id: Option<&str>,
         active_pane_id: Option<&str>,
     ) -> WheelScrollPaneDecision {
-        if !runtime_uses_tmux
-            || hovered_pane_id.is_none()
-            || hovered_pane_id == active_pane_id
-        {
+        if !runtime_uses_tmux || hovered_pane_id.is_none() || hovered_pane_id == active_pane_id {
             WheelScrollPaneDecision::UseActivePane
         } else {
             WheelScrollPaneDecision::FocusHoveredPane
@@ -223,7 +223,8 @@ impl TerminalView {
         if gutter_width <= f32::EPSILON {
             return None;
         }
-        let scrollbar_left = (surface.origin_x + surface.width.max(0.0) - gutter_width).max(surface.origin_x);
+        let scrollbar_left =
+            (surface.origin_x + surface.width.max(0.0) - gutter_width).max(surface.origin_x);
         let scrollbar_right = scrollbar_left + gutter_width;
 
         let x: f32 = position.x.into();
@@ -365,14 +366,12 @@ impl TerminalView {
 
         cx.stop_propagation();
         let delta_lines = self.terminal_scroll_delta_to_lines(event);
-        let attempted_retarget = if Self::should_attempt_wheel_scroll_retarget(
-            event.touch_phase,
-            delta_lines,
-        ) {
-            self.retarget_scroll_wheel_pane(event.position, cx)
-        } else {
-            WheelScrollRetargetResult::Unchanged
-        };
+        let attempted_retarget =
+            if Self::should_attempt_wheel_scroll_retarget(event.touch_phase, delta_lines) {
+                self.retarget_scroll_wheel_pane(event.position, cx)
+            } else {
+                WheelScrollRetargetResult::Unchanged
+            };
         let retarget_result =
             Self::wheel_scroll_retarget_result(event.touch_phase, delta_lines, attempted_retarget);
         match retarget_result {
@@ -499,8 +498,7 @@ mod tests {
             true,
             Some("%8"),
         );
-        let retarget =
-            TerminalView::wheel_scroll_retarget_result(TouchPhase::Moved, 1, attempted);
+        let retarget = TerminalView::wheel_scroll_retarget_result(TouchPhase::Moved, 1, attempted);
         assert_eq!(retarget, WheelScrollRetargetResult::Switched);
     }
 
@@ -513,8 +511,7 @@ mod tests {
             false,
             Some("%3"),
         );
-        let retarget =
-            TerminalView::wheel_scroll_retarget_result(TouchPhase::Moved, 1, attempted);
+        let retarget = TerminalView::wheel_scroll_retarget_result(TouchPhase::Moved, 1, attempted);
         assert_eq!(retarget, WheelScrollRetargetResult::Abort);
     }
 
@@ -527,8 +524,7 @@ mod tests {
             true,
             Some("%8"),
         );
-        let retarget =
-            TerminalView::wheel_scroll_retarget_result(TouchPhase::Ended, 0, attempted);
+        let retarget = TerminalView::wheel_scroll_retarget_result(TouchPhase::Ended, 0, attempted);
         assert_eq!(retarget, WheelScrollRetargetResult::NotRetargeted);
     }
 

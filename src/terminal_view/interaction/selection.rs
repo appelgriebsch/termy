@@ -74,13 +74,12 @@ fn selected_text_from_terminal(
         col: end.col.min(cols.saturating_sub(1)),
         line: end.line,
     };
-    let (selection_start, selection_end) = if (clamped_end.line, clamped_end.col)
-        < (clamped_start.line, clamped_start.col)
-    {
-        (clamped_end, clamped_start)
-    } else {
-        (clamped_start, clamped_end)
-    };
+    let (selection_start, selection_end) =
+        if (clamped_end.line, clamped_end.col) < (clamped_start.line, clamped_start.col) {
+            (clamped_end, clamped_start)
+        } else {
+            (clamped_start, clamped_end)
+        };
 
     let mut lines = Vec::new();
     let _ = terminal.with_grid(|grid| {
@@ -152,6 +151,7 @@ fn row_text_from_terminal(terminal: &Terminal, row: usize, cols: usize) -> Vec<c
     line
 }
 
+#[allow(clippy::too_many_arguments)]
 fn pane_cell_for_position(
     pane: &TerminalPane,
     x: f32,
@@ -213,6 +213,7 @@ fn pane_cell_for_position(
     })
 }
 
+#[allow(clippy::too_many_arguments)]
 fn resolve_pane_cell_for_position(
     panes: &[TerminalPane],
     active_pane_id: Option<&str>,
@@ -244,9 +245,7 @@ fn resolve_pane_cell_for_position(
     if clamp
         && !pointer_inside_any_pane
         && let Some(active_pane_id) = active_pane_id
-        && let Some(active_pane) = panes
-            .iter()
-            .find(|pane| pane.id.as_str() == active_pane_id)
+        && let Some(active_pane) = panes.iter().find(|pane| pane.id.as_str() == active_pane_id)
         && let Some(cell) = pane_cell_for_position(
             active_pane,
             x,
@@ -479,14 +478,14 @@ impl TerminalView {
     pub(in super::super) fn open_link(url: &str) -> bool {
         #[cfg(target_os = "macos")]
         {
-            return Command::new("open")
+            Command::new("open")
                 .arg(url)
                 .stdin(Stdio::null())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .spawn()
                 .map(|_| true)
-                .unwrap_or(false);
+                .unwrap_or(false)
         }
         #[cfg(target_os = "linux")]
         {
@@ -512,7 +511,6 @@ impl TerminalView {
         }
     }
 
-
     pub(in super::super) fn is_link_modifier(modifiers: gpui::Modifiers) -> bool {
         modifiers.secondary() && !modifiers.alt && !modifiers.function
     }
@@ -534,7 +532,10 @@ mod tests {
     fn term_line_round_trips_viewport_row_with_display_offset() {
         let line = TerminalView::term_line_from_viewport_row(0, 4);
         assert_eq!(line, Some(-4));
-        assert_eq!(TerminalView::viewport_row_from_term_line(line.unwrap(), 4), Some(0));
+        assert_eq!(
+            TerminalView::viewport_row_from_term_line(line.unwrap(), 4),
+            Some(0)
+        );
     }
 
     fn non_empty_grid_lines(terminal: &Terminal) -> Vec<(i32, String)> {
@@ -593,7 +594,10 @@ mod tests {
         assert!(before_scroll.contains("line-1"));
         assert!(before_scroll.contains("line-3"));
 
-        assert!(terminal.scroll_display(1), "expected display offset to change");
+        assert!(
+            terminal.scroll_display(1),
+            "expected display offset to change"
+        );
         let after_scroll =
             selected_text_from_terminal(&terminal, start, end).expect("selection should resolve");
 
@@ -784,8 +788,8 @@ mod tests {
         let clamped_y = (pointer_y - active_origin_y).clamp(0.0, active_height - f32::EPSILON);
         let expected_col =
             ((clamped_x / cell_width).floor() as i32).clamp(0, i32::from(size.cols) - 1) as usize;
-        let expected_row = ((clamped_y / cell_height).floor() as i32)
-            .clamp(0, i32::from(size.rows) - 1) as usize;
+        let expected_row =
+            ((clamped_y / cell_height).floor() as i32).clamp(0, i32::from(size.rows) - 1) as usize;
 
         let resolved = resolve_pane_cell_for_position(
             &panes,

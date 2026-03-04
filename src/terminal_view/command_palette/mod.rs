@@ -217,16 +217,16 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) {
         self.command_palette.clear_shortcut_cache();
-        if mode == CommandPaletteMode::TmuxSessions {
-            if let Err(error) = self.reload_tmux_session_palette_items() {
-                // Keep the tmux session palette usable when list-sessions fails by
-                // preserving the selected socket target and rendering intent-specific rows.
-                self.command_palette.set_tmux_session_rows(
-                    Vec::new(),
-                    self.tmux_primary_socket_target_for_session_palette(),
-                );
-                termy_toast::error(format!("Failed to list tmux sessions: {error}"));
-            }
+        if mode == CommandPaletteMode::TmuxSessions
+            && let Err(error) = self.reload_tmux_session_palette_items()
+        {
+            // Keep the tmux session palette usable when list-sessions fails by
+            // preserving the selected socket target and rendering intent-specific rows.
+            self.command_palette.set_tmux_session_rows(
+                Vec::new(),
+                self.tmux_primary_socket_target_for_session_palette(),
+            );
+            termy_toast::error(format!("Failed to list tmux sessions: {error}"));
         }
         let items = self.command_palette_items_for_mode(mode);
         self.command_palette.set_items(items);
@@ -818,9 +818,11 @@ mod tests {
 
         let available_install_cli = available_items
             .iter()
-            .find_map(|item| match item.kind {
-                CommandPaletteItemKind::Command(CommandAction::InstallCli) => Some(item),
-                _ => None,
+            .find(|item| {
+                matches!(
+                    item.kind,
+                    CommandPaletteItemKind::Command(CommandAction::InstallCli)
+                )
             })
             .expect("missing Install CLI in available command palette state");
         assert!(available_install_cli.enabled);
@@ -828,9 +830,11 @@ mod tests {
 
         let unavailable_install_cli = unavailable_items
             .iter()
-            .find_map(|item| match item.kind {
-                CommandPaletteItemKind::Command(CommandAction::InstallCli) => Some(item),
-                _ => None,
+            .find(|item| {
+                matches!(
+                    item.kind,
+                    CommandPaletteItemKind::Command(CommandAction::InstallCli)
+                )
             })
             .expect("missing Install CLI in unavailable command palette state");
         assert!(!unavailable_install_cli.enabled);
@@ -859,9 +863,11 @@ mod tests {
     #[test]
     fn tmux_only_commands_are_present_but_disabled_when_tmux_runtime_is_off() {
         let items = TerminalView::command_palette_command_items_for_state(false, false);
-        let resize = items.iter().find_map(|item| match item.kind {
-            CommandPaletteItemKind::Command(CommandAction::ResizePaneLeft) => Some(item),
-            _ => None,
+        let resize = items.iter().find(|item| {
+            matches!(
+                item.kind,
+                CommandPaletteItemKind::Command(CommandAction::ResizePaneLeft)
+            )
         });
         #[cfg(not(target_os = "windows"))]
         {

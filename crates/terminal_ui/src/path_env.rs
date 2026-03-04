@@ -1,9 +1,5 @@
 #[cfg(not(target_os = "windows"))]
-use std::{
-    env,
-    ffi::OsStr,
-    path::PathBuf,
-};
+use std::{env, ffi::OsStr, path::PathBuf};
 
 #[cfg(not(target_os = "windows"))]
 const DEFAULT_SYSTEM_PATH_ENTRIES: [&str; 4] = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
@@ -42,10 +38,7 @@ pub(crate) fn normalized_path_env(path: Option<&OsStr>) -> Option<String> {
 #[cfg(all(test, unix))]
 mod tests {
     use super::normalized_path_env;
-    use std::{
-        ffi::OsString,
-        path::PathBuf,
-    };
+    use std::{ffi::OsString, path::PathBuf};
 
     #[test]
     fn normalized_path_env_starts_from_default_system_path_when_missing() {
@@ -78,7 +71,13 @@ mod tests {
         let path = normalized_path_env(Some(raw.as_os_str())).expect("normalized path");
         let parsed = std::env::split_paths(&OsString::from(path)).collect::<Vec<_>>();
         let homebrew_bin = PathBuf::from("/opt/homebrew/bin");
-        assert_eq!(parsed.iter().filter(|entry| **entry == homebrew_bin).count(), 1);
+        assert_eq!(
+            parsed
+                .iter()
+                .filter(|entry| **entry == homebrew_bin)
+                .count(),
+            1
+        );
         assert!(parsed.contains(&PathBuf::from("/opt/homebrew/sbin")));
         assert!(parsed.contains(&PathBuf::from("/usr/local/bin")));
         assert!(parsed.contains(&PathBuf::from("/usr/local/sbin")));

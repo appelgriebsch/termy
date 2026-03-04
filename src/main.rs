@@ -15,9 +15,9 @@ mod ui;
 use commands::{OpenConfig, OpenSettings};
 use gpui::{App, Application, Bounds, WindowBounds, WindowOptions, prelude::*, px, size};
 use startup::StartupBlocker;
+use terminal_view::{TerminalView, initial_window_background_appearance};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use termy_terminal_ui::TmuxClient;
-use terminal_view::{TerminalView, initial_window_background_appearance};
 
 pub(crate) const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -116,19 +116,16 @@ fn main() {
             title: None,
             appears_transparent: true,
             traffic_light_position: Some(gpui::point(px(12.0), px(10.0))),
-            ..Default::default()
         });
         #[cfg(target_os = "windows")]
         let titlebar = Some(gpui::TitlebarOptions {
             title: None,
             appears_transparent: true,
-            ..Default::default()
         });
         #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
         let titlebar = Some(gpui::TitlebarOptions {
             title: None,
             appears_transparent: true,
-            ..Default::default()
         });
 
         cx.open_window(

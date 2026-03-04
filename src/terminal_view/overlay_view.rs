@@ -29,7 +29,10 @@ impl Render for TerminalOverlayView {
                     );
                 }
                 // Parent teardown can race with child repaint; keep this non-panicking.
-                div().id("terminal-overlay-empty").size_full().into_any_element()
+                div()
+                    .id("terminal-overlay-empty")
+                    .size_full()
+                    .into_any_element()
             }
         }
     }

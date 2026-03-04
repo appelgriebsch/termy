@@ -1,5 +1,5 @@
-use super::*;
 use super::state_tmux::{TmuxSessionRow, TmuxSessionStatusHint};
+use super::*;
 use termy_terminal_ui::{TmuxClient, TmuxLaunchTarget, TmuxSocketTarget};
 
 impl TerminalView {
@@ -179,7 +179,9 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) {
         if !enabled {
-            termy_toast::info(Self::command_palette_disabled_tmux_session_message(status_hint));
+            termy_toast::info(Self::command_palette_disabled_tmux_session_message(
+                status_hint,
+            ));
             self.notify_overlay(cx);
             return;
         }
@@ -234,7 +236,9 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) {
         if !enabled {
-            termy_toast::info(Self::command_palette_disabled_tmux_session_message(status_hint));
+            termy_toast::info(Self::command_palette_disabled_tmux_session_message(
+                status_hint,
+            ));
             self.notify_overlay(cx);
             return;
         }
@@ -250,8 +254,10 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) {
         if let Err(error) = self.reload_tmux_session_palette_items() {
-            self.command_palette
-                .set_tmux_session_rows(Vec::new(), self.tmux_primary_socket_target_for_session_palette());
+            self.command_palette.set_tmux_session_rows(
+                Vec::new(),
+                self.tmux_primary_socket_target_for_session_palette(),
+            );
             termy_toast::error(format!("Failed to list tmux sessions: {error}"));
         }
         self.refresh_command_palette_matches(false, cx);
@@ -268,7 +274,9 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) {
         if !enabled {
-            termy_toast::info(Self::command_palette_disabled_tmux_session_message(status_hint));
+            termy_toast::info(Self::command_palette_disabled_tmux_session_message(
+                status_hint,
+            ));
             self.notify_overlay(cx);
             return;
         }
@@ -313,7 +321,9 @@ impl TerminalView {
         cx: &mut Context<Self>,
     ) {
         if !enabled {
-            termy_toast::info(Self::command_palette_disabled_tmux_session_message(status_hint));
+            termy_toast::info(Self::command_palette_disabled_tmux_session_message(
+                status_hint,
+            ));
             self.notify_overlay(cx);
             return;
         }
@@ -426,8 +436,9 @@ mod tests {
 
     #[test]
     fn tmux_session_list_error_classifier_uses_full_error_chain() {
-        let wrapped = anyhow!("error connecting to /tmp/tmux-1000/default (No such file or directory)")
-            .context("tmux session listing failed: list-sessions -F '#{q:session_name}'");
+        let wrapped =
+            anyhow!("error connecting to /tmp/tmux-1000/default (No such file or directory)")
+                .context("tmux session listing failed: list-sessions -F '#{q:session_name}'");
         assert!(TerminalView::tmux_session_list_error_is_ignorable(&wrapped));
 
         let wrapped_real_failure = anyhow!("unsupported format string")

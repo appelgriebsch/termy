@@ -27,10 +27,8 @@ impl TerminalView {
         }
 
         self.prepare_terminal_input_write(cx);
-        if self.send_input_to_active_pane(input) {
-            if self.runtime_kind() == RuntimeKind::Tmux {
-                self.schedule_tmux_title_refresh();
-            }
+        if self.send_input_to_active_pane(input) && self.runtime_kind() == RuntimeKind::Tmux {
+            self.schedule_tmux_title_refresh();
         }
     }
 
@@ -78,15 +76,20 @@ impl TerminalView {
 
         // Send one framed payload so start/content/end ordering is atomic and
         // tmux can pick an efficient high-volume path for large pastes.
-        let mut framed =
-            Vec::with_capacity(BRACKETED_PASTE_START.len() + payload.len() + BRACKETED_PASTE_END.len());
+        let mut framed = Vec::with_capacity(
+            BRACKETED_PASTE_START.len() + payload.len() + BRACKETED_PASTE_END.len(),
+        );
         framed.extend_from_slice(BRACKETED_PASTE_START);
         framed.extend_from_slice(payload);
         framed.extend_from_slice(BRACKETED_PASTE_END);
         framed
     }
 
-    pub(in super::super) fn write_terminal_paste_input(&mut self, input: &[u8], cx: &mut Context<Self>) {
+    pub(in super::super) fn write_terminal_paste_input(
+        &mut self,
+        input: &[u8],
+        cx: &mut Context<Self>,
+    ) {
         if input.is_empty() {
             return;
         }
@@ -102,10 +105,8 @@ impl TerminalView {
             self.send_input_to_active_pane(input)
         };
 
-        if wrote_input {
-            if self.runtime_kind() == RuntimeKind::Tmux {
-                self.schedule_tmux_title_refresh();
-            }
+        if wrote_input && self.runtime_kind() == RuntimeKind::Tmux {
+            self.schedule_tmux_title_refresh();
         }
     }
 

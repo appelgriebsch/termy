@@ -244,20 +244,20 @@ pub fn render_vertical(
             }));
         }
 
-        if let Some(color) = style.current_marker_color {
-            if let Some(top) = current_marker_top {
-                marker_elements.push(
-                    div()
-                        .absolute()
-                        .left(px(marker_inset))
-                        .right(px(marker_inset))
-                        .top(px(top.clamp(0.0, marker_top_max)))
-                        .h(px(marker_height))
-                        .rounded(px(marker_radius))
-                        .bg(color)
-                        .into_any_element(),
-                );
-            }
+        if let Some(color) = style.current_marker_color
+            && let Some(top) = current_marker_top
+        {
+            marker_elements.push(
+                div()
+                    .absolute()
+                    .left(px(marker_inset))
+                    .right(px(marker_inset))
+                    .top(px(top.clamp(0.0, marker_top_max)))
+                    .h(px(marker_height))
+                    .rounded(px(marker_radius))
+                    .bg(color)
+                    .into_any_element(),
+            );
         }
     }
 

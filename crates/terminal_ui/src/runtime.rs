@@ -1,3 +1,7 @@
+#[cfg(unix)]
+use crate::locale::{Utf8LocaleOverridePlan, preferred_utf8_locale, utf8_locale_override_plan};
+#[cfg(not(target_os = "windows"))]
+use crate::path_env::normalized_path_env;
 use alacritty_terminal::{
     event::{Event as AlacEvent, EventListener, WindowSize},
     event_loop::{EventLoop, Msg, Notifier},
@@ -8,10 +12,6 @@ use alacritty_terminal::{
 };
 use flume::{Receiver, Sender, unbounded};
 use gpui::{Keystroke, Modifiers, Pixels, px};
-#[cfg(unix)]
-use crate::locale::{Utf8LocaleOverridePlan, preferred_utf8_locale, utf8_locale_override_plan};
-#[cfg(not(target_os = "windows"))]
-use crate::path_env::normalized_path_env;
 #[cfg(not(target_os = "windows"))]
 use std::path::Path;
 use std::{
@@ -254,7 +254,8 @@ fn apply_utf8_locale_overrides(env_overrides: &mut HashMap<String, String>) {
     let lc_all = env::var("LC_ALL").ok();
     let lc_ctype = env::var("LC_CTYPE").ok();
     let lang = env::var("LANG").ok();
-    let target_utf8_locale = preferred_utf8_locale(lc_all.as_deref(), lc_ctype.as_deref(), lang.as_deref());
+    let target_utf8_locale =
+        preferred_utf8_locale(lc_all.as_deref(), lc_ctype.as_deref(), lang.as_deref());
 
     // zsh prompt width calculations rely on libc wcwidth + locale. If the shell
     // starts in C/POSIX/non-UTF-8 locale, multibyte prompt glyphs (e.g. U+276F)
@@ -728,7 +729,10 @@ impl Drop for Terminal {
 ///
 /// `prompt_shortcuts_enabled` should be false for alternate-screen TUIs to avoid
 /// remapping non-macOS Ctrl+special keys to readline-style prompt editing bytes.
-pub fn keystroke_to_input(keystroke: &Keystroke, prompt_shortcuts_enabled: bool) -> Option<Vec<u8>> {
+pub fn keystroke_to_input(
+    keystroke: &Keystroke,
+    prompt_shortcuts_enabled: bool,
+) -> Option<Vec<u8>> {
     if let Some(modified_input) =
         modified_special_keystroke_input(keystroke, prompt_shortcuts_enabled)
     {
@@ -877,6 +881,12 @@ fn is_plain_control(modifiers: Modifiers) -> bool {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(target_os = "windows")]
+    use super::quote_shell_program_if_needed;
+    use super::{
+        DEFAULT_TERM, TerminalDamageSnapshot, TerminalRuntimeConfig, TerminalSize,
+        keystroke_to_input, pty_env_overrides, resolve_shell_path, take_term_damage_snapshot,
+    };
     use alacritty_terminal::{
         event::VoidListener,
         grid::{Dimensions, Scroll},
@@ -884,12 +894,6 @@ mod tests {
         vte::ansi,
     };
     use gpui::{Keystroke, Modifiers, px};
-    #[cfg(target_os = "windows")]
-    use super::quote_shell_program_if_needed;
-    use super::{
-        DEFAULT_TERM, TerminalDamageSnapshot, TerminalRuntimeConfig, TerminalSize,
-        keystroke_to_input, pty_env_overrides, resolve_shell_path, take_term_damage_snapshot,
-    };
 
     fn cursor_after_bytes(input: &[u8]) -> (usize, i32) {
         let size = TerminalSize {
@@ -1192,9 +1196,18 @@ mod tests {
             ..Default::default()
         };
 
-        assert_eq!(keystroke_to_input(&keystroke("a", control), true), Some(vec![0x01]));
-        assert_eq!(keystroke_to_input(&keystroke("c", control), true), Some(vec![0x03]));
-        assert_eq!(keystroke_to_input(&keystroke("z", control), true), Some(vec![0x1a]));
+        assert_eq!(
+            keystroke_to_input(&keystroke("a", control), true),
+            Some(vec![0x01])
+        );
+        assert_eq!(
+            keystroke_to_input(&keystroke("c", control), true),
+            Some(vec![0x03])
+        );
+        assert_eq!(
+            keystroke_to_input(&keystroke("z", control), true),
+            Some(vec![0x1a])
+        );
     }
 
     #[test]
@@ -1340,7 +1353,11 @@ mod tests {
     #[test]
     fn preferred_utf8_locale_preserves_lang_region_from_lc_all() {
         assert_eq!(
-            super::preferred_utf8_locale(Some("fr_FR.ISO8859-1"), Some("C"), Some("en_US.ISO8859-1")),
+            super::preferred_utf8_locale(
+                Some("fr_FR.ISO8859-1"),
+                Some("C"),
+                Some("en_US.ISO8859-1")
+            ),
             "fr_FR.UTF-8"
         );
     }

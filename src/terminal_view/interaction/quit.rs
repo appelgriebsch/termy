@@ -79,7 +79,12 @@ impl TerminalView {
                 .any(|pane| pane.terminal.alternate_screen_mode())
     }
 
-    fn tab_title_for_warning(&self, index: usize, tab: &TerminalTab, fallback_title: &str) -> String {
+    fn tab_title_for_warning(
+        &self,
+        index: usize,
+        tab: &TerminalTab,
+        fallback_title: &str,
+    ) -> String {
         let title = tab.title.trim();
         if title.is_empty() {
             format!("{fallback_title} {}", index + 1)
@@ -117,7 +122,9 @@ impl TerminalView {
 
     fn close_warning_buttons(target: CloseRequestTarget) -> &'static [&'static str] {
         match target {
-            CloseRequestTarget::Application | CloseRequestTarget::WindowClose => &["Quit", "Cancel"],
+            CloseRequestTarget::Application | CloseRequestTarget::WindowClose => {
+                &["Quit", "Cancel"]
+            }
             CloseRequestTarget::TabClose { .. } => &["Close Tab", "Cancel"],
         }
     }
@@ -216,7 +223,7 @@ impl TerminalView {
 
         cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
             let confirmed = matches!(prompt.await, Ok(0));
-            let _ = cx.update(|cx| {
+            cx.update(|cx| {
                 let mut follow_through = false;
                 if this
                     .update(cx, |view, _| {
@@ -266,7 +273,11 @@ impl TerminalView {
         self.request_close(CloseRequestTarget::WindowClose, window, cx)
     }
 
-    pub(in super::super) fn request_application_quit(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+    pub(in super::super) fn request_application_quit(
+        &mut self,
+        window: &mut Window,
+        cx: &mut Context<Self>,
+    ) {
         self.request_close(CloseRequestTarget::Application, window, cx);
     }
 

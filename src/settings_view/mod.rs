@@ -480,11 +480,11 @@ impl SettingsWindow {
                     .chars()
                     .filter(|c| *c != '\n' && *c != '\r')
                     .collect();
-                if !filtered_text.is_empty() {
-                    if let Some(input) = self.active_input.as_mut() {
-                        input.state.replace_text_in_range(None, &filtered_text);
-                        cx.notify();
-                    }
+                if !filtered_text.is_empty()
+                    && let Some(input) = self.active_input.as_mut()
+                {
+                    input.state.replace_text_in_range(None, &filtered_text);
+                    cx.notify();
                 }
             }
             return;
@@ -492,11 +492,11 @@ impl SettingsWindow {
 
         match event.keystroke.key.as_str() {
             "enter" => {
-                if let Some(field) = active_field {
-                    if field == EditableField::Theme {
-                        self.commit_active_input(cx);
-                        return;
-                    }
+                if let Some(field) = active_field
+                    && field == EditableField::Theme
+                {
+                    self.commit_active_input(cx);
+                    return;
                 }
                 if let Some(field) = active_field
                     && self.commit_dropdown_selection(field, &active_input_query, cx)
@@ -510,7 +510,6 @@ impl SettingsWindow {
                 if let Some(field) = active_field
                     && self.commit_dropdown_selection(field, &active_input_query, cx)
                 {
-                    return;
                 }
             }
             "backspace" => {

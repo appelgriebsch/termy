@@ -773,6 +773,7 @@ impl TerminalView {
             .into_any_element()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn build_tabs_scroll_content(
         &mut self,
         window: &Window,
@@ -865,6 +866,7 @@ impl TerminalView {
         tabs_scroll_content.into_any_element()
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn render_tabbar_new_tab_button(
         &self,
         bg: gpui::Rgba,

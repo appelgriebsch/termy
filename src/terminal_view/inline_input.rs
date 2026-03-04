@@ -879,7 +879,11 @@ impl TerminalView {
         }
     }
 
-    fn notify_for_inline_input_target(&mut self, target: InlineInputTarget, cx: &mut Context<Self>) {
+    fn notify_for_inline_input_target(
+        &mut self,
+        target: InlineInputTarget,
+        cx: &mut Context<Self>,
+    ) {
         match Self::inline_input_notify_target_for_target(target) {
             InlineInputNotifyTarget::Parent => cx.notify(),
             InlineInputNotifyTarget::Overlay => self.notify_overlay(cx),

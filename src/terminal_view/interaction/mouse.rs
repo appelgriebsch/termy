@@ -349,18 +349,17 @@ impl TerminalView {
             }
         }
 
-        if Self::is_link_modifier(event.modifiers) {
-            if let Some(cell) = self.position_to_cell(event.position, false) {
-                if let Some(link) = self.link_at_cell(cell) {
-                    if !Self::open_link(&link.target) {
-                        termy_toast::error("Failed to open link");
-                    }
-                    if self.clear_hovered_link() {
-                        cx.notify();
-                    }
-                    return;
-                }
+        if Self::is_link_modifier(event.modifiers)
+            && let Some(cell) = self.position_to_cell(event.position, false)
+            && let Some(link) = self.link_at_cell(cell)
+        {
+            if !Self::open_link(&link.target) {
+                termy_toast::error("Failed to open link");
             }
+            if self.clear_hovered_link() {
+                cx.notify();
+            }
+            return;
         }
 
         let Some(cell) = self.position_to_cell(event.position, false) else {
@@ -370,20 +369,16 @@ impl TerminalView {
             return;
         };
 
-        if event.click_count >= 3 {
-            if self.select_line_at_row(cell.row) {
-                self.clear_hovered_link();
-                cx.notify();
-                return;
-            }
+        if event.click_count >= 3 && self.select_line_at_row(cell.row) {
+            self.clear_hovered_link();
+            cx.notify();
+            return;
         }
 
-        if event.click_count == 2 {
-            if self.select_token_at_cell(cell) {
-                self.clear_hovered_link();
-                cx.notify();
-                return;
-            }
+        if event.click_count == 2 && self.select_token_at_cell(cell) {
+            self.clear_hovered_link();
+            cx.notify();
+            return;
         }
 
         let Some(selection_pos) = self.selection_pos_for_cell(cell) else {
@@ -439,12 +434,11 @@ impl TerminalView {
         if !self.selection_dragging || !event.dragging() {
             if Self::is_link_modifier(event.modifiers) {
                 let hover_cell = self.position_to_cell(event.position, false);
-                if let (Some(cell), Some(current)) = (hover_cell, self.hovered_link.as_ref()) {
-                    if current.row == cell.row
-                        && (current.start_col..=current.end_col).contains(&cell.col)
-                    {
-                        return;
-                    }
+                if let (Some(cell), Some(current)) = (hover_cell, self.hovered_link.as_ref())
+                    && current.row == cell.row
+                    && (current.start_col..=current.end_col).contains(&cell.col)
+                {
+                    return;
                 }
 
                 let next = hover_cell.and_then(|cell| self.link_at_cell(cell));
@@ -455,7 +449,6 @@ impl TerminalView {
             } else if self.clear_hovered_link() {
                 cx.notify();
             }
-            return;
         }
 
         // Selection drag updates are handled by the global mouse-move listener so drag
@@ -517,9 +510,8 @@ mod tests {
         let up = TerminalView::selection_drag_autoscroll_lines_from_bounds(
             -10_000.0, 100.0, 300.0, 20.0,
         );
-        let down = TerminalView::selection_drag_autoscroll_lines_from_bounds(
-            10_000.0, 100.0, 300.0, 20.0,
-        );
+        let down =
+            TerminalView::selection_drag_autoscroll_lines_from_bounds(10_000.0, 100.0, 300.0, 20.0);
 
         assert_eq!(up, SELECTION_DRAG_AUTOSCROLL_MAX_LINES);
         assert_eq!(down, -SELECTION_DRAG_AUTOSCROLL_MAX_LINES);

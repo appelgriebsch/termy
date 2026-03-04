@@ -111,7 +111,7 @@ impl TerminalView {
         let mut low = 0usize;
         let mut high = chars.len();
         while low < high {
-            let mid = (low + high + 1) / 2;
+            let mid = (low + high).div_ceil(2);
             let candidate = candidate_for(mid);
             if measure_text_px(candidate.as_str()) <= available_text_px {
                 low = mid;
