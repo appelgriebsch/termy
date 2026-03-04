@@ -125,6 +125,37 @@ fn pane_cache_update_strategy(
     }
 }
 
+fn finalized_cache_update_strategy(
+    planned: PaneCacheUpdateStrategy,
+    did_full_rebuild: bool,
+) -> PaneCacheUpdateStrategy {
+    if planned == PaneCacheUpdateStrategy::Partial && did_full_rebuild {
+        PaneCacheUpdateStrategy::Full
+    } else {
+        planned
+    }
+}
+
+fn paint_damage_from_dirty_spans(
+    spans: &[TerminalDirtySpan],
+    row_count: usize,
+) -> TerminalGridPaintDamage {
+    let mut rows = Vec::new();
+    rows.reserve(spans.len());
+    for span in spans {
+        if span.row < row_count {
+            rows.push(span.row);
+        }
+    }
+    rows.sort_unstable();
+    rows.dedup();
+    if rows.is_empty() {
+        TerminalGridPaintDamage::None
+    } else {
+        TerminalGridPaintDamage::Rows(rows.into())
+    }
+}
+
 #[derive(Clone, Copy)]
 struct PaneCellBuildContext<'a> {
     colors: &'a TerminalColors,
@@ -548,10 +579,10 @@ impl TerminalView {
         cells: &mut PaneRenderCells,
         spans: &[TerminalDirtySpan],
         context: PaneCellBuildContext<'_>,
-    ) -> usize {
+    ) -> (usize, bool) {
         if !pane_render_cells_match_dimensions(cells, cols, rows) {
             *cells = self.rebuild_pane_render_cache(terminal, cols, rows, display_offset, context);
-            return 0;
+            return (0, true);
         }
 
         let mut updates = Vec::new();
@@ -597,12 +628,12 @@ impl TerminalView {
         });
 
         if updates.is_empty() {
-            return 0;
+            return (0, false);
         }
 
         let patched_cell_count = updates.len();
         *cells = merge_pane_render_rows(cells, rows, cols, updates);
-        patched_cell_count
+        (patched_cell_count, false)
     }
 
     fn update_pane_render_cache(
@@ -615,15 +646,23 @@ impl TerminalView {
         cache_key: TerminalPaneRenderCacheKey,
         context: PaneCellBuildContext<'_>,
         #[cfg(debug_assertions)] render_pass_cache_counts: &mut RenderPassCacheStrategyCounts,
-    ) -> (PaneRenderCells, PaneCacheUpdateStrategy) {
+    ) -> (PaneRenderCells, PaneCacheUpdateStrategy, TerminalGridPaintDamage) {
         let damage = terminal.take_damage_snapshot();
-        let strategy = pane_cache_update_strategy(
+        let mut strategy = pane_cache_update_strategy(
             !cache.cells.is_empty(),
             cache.cols == cols && cache.rows == rows,
             cache.display_offset == display_offset,
             cache.key.as_ref() == Some(&cache_key),
             &damage,
         );
+        let mut paint_damage = match strategy {
+            PaneCacheUpdateStrategy::Reuse => TerminalGridPaintDamage::None,
+            PaneCacheUpdateStrategy::Full => TerminalGridPaintDamage::Full,
+            PaneCacheUpdateStrategy::Partial => match &damage {
+                TerminalDamageSnapshot::Partial(spans) => paint_damage_from_dirty_spans(spans, rows),
+                TerminalDamageSnapshot::Full => TerminalGridPaintDamage::Full,
+            },
+        };
 
         match strategy {
             PaneCacheUpdateStrategy::Reuse => {}
@@ -644,9 +683,13 @@ impl TerminalView {
                     cache.rows = rows;
                     cache.display_offset = display_offset;
                     cache.key = Some(cache_key);
-                    return (cache.cells.clone(), PaneCacheUpdateStrategy::Full);
+                    return (
+                        cache.cells.clone(),
+                        PaneCacheUpdateStrategy::Full,
+                        TerminalGridPaintDamage::Full,
+                    );
                 };
-                let patched_cell_count = self.patch_pane_render_cache(
+                let (patched_cell_count, did_full_rebuild) = self.patch_pane_render_cache(
                     terminal,
                     cols,
                     rows,
@@ -655,8 +698,16 @@ impl TerminalView {
                     &spans,
                     context,
                 );
-                #[cfg(debug_assertions)]
-                render_pass_cache_counts.record_partial_work(spans.len(), patched_cell_count);
+                strategy = finalized_cache_update_strategy(strategy, did_full_rebuild);
+                if strategy == PaneCacheUpdateStrategy::Full {
+                    paint_damage = TerminalGridPaintDamage::Full;
+                } else {
+                    #[cfg(debug_assertions)]
+                    if patched_cell_count > 0 {
+                        render_pass_cache_counts
+                            .record_partial_work(spans.len(), patched_cell_count);
+                    }
+                }
             }
         }
 
@@ -664,12 +715,14 @@ impl TerminalView {
         cache.rows = rows;
         cache.display_offset = display_offset;
         cache.key = Some(cache_key);
-        (cache.cells.clone(), strategy)
+        (cache.cells.clone(), strategy, paint_damage)
     }
 
     fn build_terminal_grid_from_cache(
         &self,
         cells: PaneRenderCells,
+        paint_cache: TerminalGridPaintCacheHandle,
+        paint_damage: TerminalGridPaintDamage,
         cell_size: Size<Pixels>,
         cols: usize,
         rows: usize,
@@ -690,6 +743,8 @@ impl TerminalView {
         };
         TerminalGrid {
             cells,
+            paint_cache,
+            paint_damage,
             cell_size,
             cols,
             rows,
@@ -1620,9 +1675,10 @@ impl Render for TerminalView {
                 } else {
                     None
                 };
-                let (pane_cells, cache_strategy) = {
+                let (pane_cells, cache_strategy, paint_damage, paint_cache) = {
                     let mut pane_render_cache = pane.render_cache.borrow_mut();
-                    self.update_pane_render_cache(
+                    let paint_cache = pane_render_cache.paint_cache.clone();
+                    let (pane_cells, cache_strategy, paint_damage) = self.update_pane_render_cache(
                         terminal,
                         cols,
                         rows,
@@ -1640,7 +1696,8 @@ impl Render for TerminalView {
                         },
                         #[cfg(debug_assertions)]
                         &mut render_pass_cache_counts,
-                    )
+                    );
+                    (pane_cells, cache_strategy, paint_damage, paint_cache)
                 };
                 #[cfg(debug_assertions)]
                 render_pass_cache_counts.record(cache_strategy);
@@ -1667,6 +1724,8 @@ impl Render for TerminalView {
 
                 let terminal_grid = self.build_terminal_grid_from_cache(
                     pane_cells,
+                    paint_cache,
+                    paint_damage,
                     cell_size,
                     cols,
                     rows,
@@ -2338,6 +2397,69 @@ mod tests {
             }]),
         );
         assert_eq!(strategy, PaneCacheUpdateStrategy::Full);
+    }
+
+    #[test]
+    fn finalized_cache_update_strategy_upgrades_partial_when_fallback_rebuilds() {
+        let strategy = finalized_cache_update_strategy(PaneCacheUpdateStrategy::Partial, true);
+        assert_eq!(strategy, PaneCacheUpdateStrategy::Full);
+    }
+
+    #[test]
+    fn finalized_cache_update_strategy_keeps_planned_strategy_without_fallback() {
+        assert_eq!(
+            finalized_cache_update_strategy(PaneCacheUpdateStrategy::Reuse, false),
+            PaneCacheUpdateStrategy::Reuse
+        );
+        assert_eq!(
+            finalized_cache_update_strategy(PaneCacheUpdateStrategy::Partial, false),
+            PaneCacheUpdateStrategy::Partial
+        );
+        assert_eq!(
+            finalized_cache_update_strategy(PaneCacheUpdateStrategy::Full, true),
+            PaneCacheUpdateStrategy::Full
+        );
+    }
+
+    #[test]
+    fn paint_damage_from_dirty_spans_sorts_and_dedupes_rows() {
+        let damage = paint_damage_from_dirty_spans(
+            &[
+                TerminalDirtySpan {
+                    row: 3,
+                    left_col: 0,
+                    right_col: 1,
+                },
+                TerminalDirtySpan {
+                    row: 1,
+                    left_col: 2,
+                    right_col: 4,
+                },
+                TerminalDirtySpan {
+                    row: 3,
+                    left_col: 5,
+                    right_col: 6,
+                },
+            ],
+            4,
+        );
+        assert_eq!(
+            damage,
+            TerminalGridPaintDamage::Rows(vec![1usize, 3usize].into())
+        );
+    }
+
+    #[test]
+    fn paint_damage_from_dirty_spans_ignores_out_of_bounds_rows() {
+        let damage = paint_damage_from_dirty_spans(
+            &[TerminalDirtySpan {
+                row: 7,
+                left_col: 0,
+                right_col: 1,
+            }],
+            2,
+        );
+        assert_eq!(damage, TerminalGridPaintDamage::None);
     }
 
     #[cfg(debug_assertions)]

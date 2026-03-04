@@ -7,7 +7,12 @@ mod render_metrics;
 mod runtime;
 mod tmux;
 
-pub use grid::{CellRenderInfo, TerminalCursorStyle, TerminalGrid, TerminalGridRow, TerminalGridRows};
+// Intentionally re-exported for the app renderer adapter boundary. These types are the
+// cross-crate contract for row-level paint-cache invalidation between `termy` and this crate.
+pub use grid::{
+    CellRenderInfo, TerminalCursorStyle, TerminalGrid, TerminalGridPaintCacheHandle,
+    TerminalGridPaintDamage, TerminalGridRow, TerminalGridRows,
+};
 pub use links::{DetectedLink, classify_link_token, find_link_in_line};
 pub use pane_terminal::PaneTerminal;
 #[cfg(any(debug_assertions, test))]
