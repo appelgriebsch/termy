@@ -5,9 +5,33 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Outfit — local woff2 */
+@font-face {
+  font-family: "Outfit";
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: swap;
+  src: url("/fonts/outfit-latin.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Outfit";
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: swap;
+  src: url("/fonts/outfit-latin-ext.woff2") format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7,
+    U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F,
+    U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
 @theme {
-  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
 @theme inline {
@@ -36,49 +60,49 @@
   --color-ring: var(--ring);
 }
 
-/* Original Termy dark theme */
+/* Dark theme — clean minimal */
 :root {
   --radius: 0.75rem;
-  --background: #090d1a;
-  --foreground: #e7ebf5;
-  --card: #161d34;
-  --card-foreground: #dbe4f6;
-  --popover: #161d34;
-  --popover-foreground: #dbe4f6;
-  --primary: #a7e9a3;
-  --primary-foreground: #0b1020;
-  --secondary: #202948;
-  --secondary-foreground: #dbe4f6;
-  --muted: #1a2340;
-  --muted-foreground: #9eabc7;
-  --accent: #8cbef2;
-  --accent-foreground: #0b1020;
-  --destructive: #f1b8c5;
-  --border: #30385a;
-  --input: #30385a;
-  --ring: #69b4f2;
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+  --card: #111111;
+  --card-foreground: #fafafa;
+  --popover: #111111;
+  --popover-foreground: #fafafa;
+  --primary: #22c55e;
+  --primary-foreground: #052e16;
+  --secondary: #171717;
+  --secondary-foreground: #fafafa;
+  --muted: #171717;
+  --muted-foreground: #737373;
+  --accent: #171717;
+  --accent-foreground: #fafafa;
+  --destructive: #ef4444;
+  --border: #1a1a1a;
+  --input: #1a1a1a;
+  --ring: #22c55e;
 }
 
-/* Original Termy light theme */
+/* Light theme — clean minimal */
 .light {
-  --background: #f9fbff;
-  --foreground: #1f2d46;
-  --card: rgba(255, 255, 255, 0.9);
-  --card-foreground: #223452;
-  --popover: rgba(255, 255, 255, 0.95);
-  --popover-foreground: #223452;
-  --primary: #97dda6;
-  --primary-foreground: #10243a;
-  --secondary: #e2e9f8;
-  --secondary-foreground: #223452;
-  --muted: #edf2fc;
-  --muted-foreground: #5a6b8a;
-  --accent: #69b4f2;
-  --accent-foreground: #10243a;
-  --destructive: #d85050;
-  --border: #c8d4ea;
-  --input: #c8d4ea;
-  --ring: #9db2d6;
+  --background: #fafafa;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --popover: #ffffff;
+  --popover-foreground: #0a0a0a;
+  --primary: #16a34a;
+  --primary-foreground: #f0fdf4;
+  --secondary: #f5f5f5;
+  --secondary-foreground: #0a0a0a;
+  --muted: #f5f5f5;
+  --muted-foreground: #525252;
+  --accent: #f5f5f5;
+  --accent-foreground: #0a0a0a;
+  --destructive: #dc2626;
+  --border: #e5e5e5;
+  --input: #e5e5e5;
+  --ring: #16a34a;
 }
 
 @layer base {
@@ -92,147 +116,111 @@
   }
 }
 
-/* Gradient text - using original accent colors */
+/* Gradient text — green only */
 .gradient-text {
   @apply bg-clip-text text-transparent;
-  background-image: linear-gradient(135deg, #a7e9a3 0%, #8cbef2 100%);
+  background-image: linear-gradient(135deg, #4ade80 0%, #86efac 100%);
 }
 
 .light .gradient-text {
-  background-image: linear-gradient(135deg, #97dda6 0%, #69b4f2 100%);
+  background-image: linear-gradient(135deg, #16a34a 0%, #22c55e 100%);
 }
 
-/* Glow effects - using original primary */
-.glow-sm {
-  box-shadow: 0 0 30px -10px rgba(167, 233, 163, 0.5);
-}
-
-.glow {
-  box-shadow: 0 0 80px -20px rgba(167, 233, 163, 0.4);
-}
-
-.light .glow-sm {
-  box-shadow: 0 0 30px -10px rgba(151, 221, 166, 0.4);
-}
-
-.light .glow {
-  box-shadow: 0 0 80px -20px rgba(151, 221, 166, 0.3);
-}
-
-/* Grid background */
-.grid-bg {
-  background-size: 80px 80px;
-  background-image:
-    linear-gradient(to right, rgba(140, 190, 242, 0.03) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(140, 190, 242, 0.03) 1px, transparent 1px);
-}
-
-.light .grid-bg {
-  background-image:
-    linear-gradient(to right, rgba(105, 180, 242, 0.06) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(105, 180, 242, 0.06) 1px, transparent 1px);
-}
-
-/* Radial fade - original gradient style */
-.radial-fade {
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(102, 130, 198, 0.2), transparent),
-    radial-gradient(ellipse 60% 40% at 80% 10%, rgba(77, 174, 247, 0.12), transparent),
-    radial-gradient(ellipse 50% 30% at 20% 20%, rgba(167, 233, 163, 0.08), transparent);
-}
-
-.light .radial-fade {
-  background:
-    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(105, 180, 242, 0.15), transparent),
-    radial-gradient(ellipse 60% 40% at 80% 10%, rgba(151, 221, 166, 0.1), transparent);
-}
-
-/* Animations */
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
-}
-
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-@keyframes fade-up {
+/* Blur fade-in animation */
+@keyframes blur-fade-in {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    filter: blur(8px);
+    transform: translateY(10px);
   }
   to {
     opacity: 1;
+    filter: blur(0);
     transform: translateY(0);
   }
 }
 
-.animate-float {
-  animation: float 6s ease-in-out infinite;
+.animate-blur-in {
+  animation: blur-fade-in 0.4s ease-out forwards;
+  opacity: 0;
 }
 
-.animate-shimmer {
-  animation: shimmer 8s linear infinite;
-  background-size: 200% 100%;
-}
-
-.animate-fade-up {
-  animation: fade-up 0.6s ease-out forwards;
-}
-
-/* Terminal window styling */
+/* Terminal window styling — matches Termy app */
 .terminal-window {
-  @apply rounded-2xl border border-border/50 bg-card overflow-hidden;
+  @apply rounded-xl overflow-hidden;
+  background: #141a24;
+  border: 1px solid rgba(255, 255, 255, 0.06);
   box-shadow:
-    0 0 0 1px rgba(255, 255, 255, 0.03),
-    0 30px 60px -15px rgba(0, 0, 0, 0.5),
-    0 0 100px -30px rgba(140, 190, 242, 0.15);
+    0 25px 50px -12px rgba(0, 0, 0, 0.5),
+    0 0 0 1px rgba(255, 255, 255, 0.03);
 }
 
 .light .terminal-window {
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.03),
-    0 30px 60px -15px rgba(0, 0, 0, 0.1),
-    0 0 100px -30px rgba(105, 180, 242, 0.1);
+  background: #f0f2f5;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.12);
 }
 
 .terminal-header {
-  @apply flex items-center gap-2 px-4 py-3 bg-secondary/30 border-b border-border/50;
+  @apply relative flex items-center px-4 py-2.5;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.light .terminal-header {
+  background: rgba(0, 0, 0, 0.02);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.terminal-header-title {
+  @apply absolute left-1/2 -translate-x-1/2 text-xs font-mono;
+  color: #5c6370;
+}
+
+.terminal-dots {
+  @apply flex items-center gap-[7px];
 }
 
 .terminal-dot {
-  @apply w-3 h-3 rounded-full;
+  @apply rounded-full;
+  width: 11px;
+  height: 11px;
 }
 
-/* Card hover effect */
-.card-hover {
-  @apply transition-all duration-300;
+.terminal-body {
+  @apply p-5 font-mono overflow-auto;
+  font-size: 12.5px;
+  background: #141a24;
+  max-height: 480px;
+  line-height: 1.25;
+  color: #d1d5db;
 }
 
-.card-hover:hover {
-  @apply border-accent/50;
-  box-shadow: 0 0 40px -15px rgba(140, 190, 242, 0.3);
-  transform: translateY(-2px);
+.light .terminal-body {
+  background: #f0f2f5;
+  color: #1f2937;
 }
 
-.light .card-hover:hover {
-  box-shadow: 0 0 40px -15px rgba(105, 180, 242, 0.25);
+.terminal-input {
+  @apply bg-transparent border-none outline-none w-full p-0;
+  color: #d1d5db;
+  caret-color: transparent;
+  font: inherit;
+  line-height: inherit;
 }
 
-/* Badge styles */
-.badge-glow {
-  @apply relative;
+.light .terminal-input {
+  color: #1f2937;
 }
 
-.badge-glow::before {
-  content: "";
-  @apply absolute inset-0 rounded-full;
-  background: inherit;
-  filter: blur(8px);
-  opacity: 0.5;
-  z-index: -1;
+/* Terminal cursor blink */
+@keyframes terminal-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.animate-terminal-blink {
+  animation: terminal-blink 1s step-end infinite;
 }
 
 /* Smooth scrolling */

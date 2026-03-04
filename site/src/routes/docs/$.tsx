@@ -1,141 +1,146 @@
-import {
-  createFileRoute,
-  Link,
-  notFound,
-  useNavigate,
-} from "@tanstack/react-router";
-import { getDocBySlug, getAllDocs, extractHeadings } from "@/lib/docs";
-import { Sidebar } from "@/components/docs/Sidebar";
-import { TableOfContents } from "@/components/docs/TableOfContents";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useMemo, type JSX, type ReactNode } from "react";
 import Markdown from "react-markdown";
 import type { Components } from "react-markdown";
-import { useMemo, useCallback, type ReactNode } from "react";
-
-type SearchParams = { q?: string };
+import { Sidebar } from "@/components/docs/Sidebar";
+import { TableOfContents } from "@/components/docs/TableOfContents";
+import { Button } from "@/components/ui/button";
+import { validateSearch, useDocSearchChange } from "@/hooks/useDocSearch";
+import { extractHeadings, getAllDocs, getDocBySlug, type Doc } from "@/lib/docs";
+import { generateSlug, proseClasses } from "@/lib/utils";
 
 export const Route = createFileRoute("/docs/$")({
   component: DocPage,
-  validateSearch: (search: Record<string, unknown>): SearchParams => ({
-    q: typeof search.q === "string" ? search.q : undefined,
-  }),
+  validateSearch,
   loader: ({ params }) => {
     const slug = params._splat ?? "";
     const doc = getDocBySlug(slug);
+
     if (!doc) {
       throw notFound();
     }
+
     return doc;
   },
 });
 
-// Generate heading ID from text
-function generateId(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
+interface AdjacentDocs {
+  prevDoc: Doc | null;
+  nextDoc: Doc | null;
 }
 
-// Highlight matching text
-function highlightText(text: string, query: string): ReactNode {
-  if (!query.trim()) return text;
+function getAdjacentDocs(currentSlug: string, docs: Doc[]): AdjacentDocs {
+  const currentIndex = docs.findIndex((doc) => doc.slug === currentSlug);
 
-  const regex = new RegExp(
-    `(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
-    "gi",
-  );
+  if (currentIndex === -1) {
+    return { prevDoc: null, nextDoc: null };
+  }
+
+  const prevDoc = currentIndex > 0 ? docs[currentIndex - 1] : null;
+  const nextDoc = currentIndex < docs.length - 1 ? docs[currentIndex + 1] : null;
+
+  return { prevDoc, nextDoc };
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function highlightText(text: string, query: string): ReactNode {
+  const trimmedQuery = query.trim();
+  if (!trimmedQuery) {
+    return text;
+  }
+
+  const regex = new RegExp(`(${escapeRegex(trimmedQuery)})`, "gi");
   const parts = text.split(regex);
 
-  if (parts.length === 1) return text;
+  if (parts.length === 1) {
+    return text;
+  }
 
-  return parts.map((part, i) =>
-    regex.test(part) ? (
-      <mark key={i} className="bg-primary/30 text-foreground rounded px-0.5">
+  return parts.map((part, index) => {
+    if (index % 2 === 0) {
+      return part;
+    }
+
+    return (
+      <mark key={index} className="bg-primary/30 text-foreground rounded px-0.5">
         {part}
       </mark>
-    ) : (
-      part
-    ),
+    );
+  });
+}
+
+function wrapHighlightedChildren(children: ReactNode, query: string): ReactNode {
+  if (!query.trim()) {
+    return children;
+  }
+
+  if (typeof children === "string") {
+    return highlightText(children, query);
+  }
+
+  if (Array.isArray(children)) {
+    return children.map((child, index) => {
+      if (typeof child !== "string") {
+        return child;
+      }
+
+      return <span key={index}>{highlightText(child, query)}</span>;
+    });
+  }
+
+  return children;
+}
+
+function renderHeading(tagName: "h2" | "h3" | "h4", children: ReactNode, query: string): JSX.Element {
+  const id = generateSlug(String(children));
+  const content = wrapHighlightedChildren(children, query);
+
+  if (tagName === "h2") {
+    return (
+      <h2 id={id} className="scroll-mt-24">
+        {content}
+      </h2>
+    );
+  }
+
+  if (tagName === "h3") {
+    return (
+      <h3 id={id} className="scroll-mt-24">
+        {content}
+      </h3>
+    );
+  }
+
+  return (
+    <h4 id={id} className="scroll-mt-24">
+      {content}
+    </h4>
   );
 }
 
-// Create markdown components with optional highlighting
 function createMarkdownComponents(query: string): Components {
-  const wrapChildren = (children: ReactNode): ReactNode => {
-    if (!query.trim()) return children;
-
-    if (typeof children === "string") {
-      return highlightText(children, query);
-    }
-
-    if (Array.isArray(children)) {
-      return children.map((child, i) =>
-        typeof child === "string" ? (
-          <span key={i}>{highlightText(child, query)}</span>
-        ) : (
-          child
-        ),
-      );
-    }
-
-    return children;
-  };
-
   return {
-    h2: ({ children }) => {
-      const text = String(children);
-      const id = generateId(text);
-      return (
-        <h2 id={id} className="scroll-mt-24">
-          {wrapChildren(children)}
-        </h2>
-      );
-    },
-    h3: ({ children }) => {
-      const text = String(children);
-      const id = generateId(text);
-      return (
-        <h3 id={id} className="scroll-mt-24">
-          {wrapChildren(children)}
-        </h3>
-      );
-    },
-    h4: ({ children }) => {
-      const text = String(children);
-      const id = generateId(text);
-      return (
-        <h4 id={id} className="scroll-mt-24">
-          {wrapChildren(children)}
-        </h4>
-      );
-    },
-    p: ({ children }) => <p>{wrapChildren(children)}</p>,
-    li: ({ children }) => <li>{wrapChildren(children)}</li>,
-    strong: ({ children }) => <strong>{wrapChildren(children)}</strong>,
-    em: ({ children }) => <em>{wrapChildren(children)}</em>,
+    h2: ({ children }) => renderHeading("h2", children, query),
+    h3: ({ children }) => renderHeading("h3", children, query),
+    h4: ({ children }) => renderHeading("h4", children, query),
+    p: ({ children }) => <p>{wrapHighlightedChildren(children, query)}</p>,
+    li: ({ children }) => <li>{wrapHighlightedChildren(children, query)}</li>,
+    strong: ({ children }) => <strong>{wrapHighlightedChildren(children, query)}</strong>,
+    em: ({ children }) => <em>{wrapHighlightedChildren(children, query)}</em>,
   };
 }
 
-function DocPage() {
+function DocPage(): JSX.Element {
   const doc = Route.useLoaderData();
   const { q: search = "" } = Route.useSearch();
-  const navigate = useNavigate({ from: Route.fullPath });
   const allDocs = getAllDocs();
-  const currentIndex = allDocs.findIndex((d) => d.slug === doc.slug);
-  const prevDoc = currentIndex > 0 ? allDocs[currentIndex - 1] : null;
-  const nextDoc =
-    currentIndex < allDocs.length - 1 ? allDocs[currentIndex + 1] : null;
+  const { prevDoc, nextDoc } = getAdjacentDocs(doc.slug, allDocs);
   const headings = extractHeadings(doc.content);
-
-  const handleSearchChange = useCallback(
-    (value: string) => {
-      navigate({
-        search: value ? { q: value } : {},
-        replace: true,
-      });
-    },
-    [navigate],
-  );
+  const handleSearchChange = useDocSearchChange(Route.fullPath);
 
   const markdownComponents = useMemo(
     () => createMarkdownComponents(search),
@@ -145,37 +150,25 @@ function DocPage() {
   return (
     <section className="pt-24 pb-20">
       <div className="flex gap-8">
-        {/* Sidebar */}
         <Sidebar
           currentSlug={doc.slug}
           search={search}
           onSearchChange={handleSearchChange}
         />
 
-        {/* Main content */}
         <main className="flex-1 min-w-0">
-          {/* Mobile back link */}
-          <Link
-            to="/docs"
-            className="lg:hidden text-sm text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1 mb-6"
+          <Button
+            asChild
+            variant="ghost"
+            size="sm"
+            className="lg:hidden mb-6 text-muted-foreground hover:text-foreground"
           >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-            All docs
-          </Link>
+            <Link to="/docs">
+              <ChevronLeft className="w-4 h-4" />
+              All docs
+            </Link>
+          </Button>
 
-          {/* Search indicator */}
           {search && (
             <div className="mb-4 flex items-center gap-2 text-sm text-muted-foreground">
               <span>Highlighting: </span>
@@ -185,12 +178,9 @@ function DocPage() {
             </div>
           )}
 
-          {/* Header */}
           <div className="mb-8">
             {doc.category && (
-              <span className="text-sm text-primary font-medium">
-                {doc.category}
-              </span>
+              <span className="text-sm text-primary font-medium">{doc.category}</span>
             )}
             <h1 className="text-3xl md:text-4xl font-bold mt-1">{doc.title}</h1>
             {doc.description && (
@@ -198,12 +188,10 @@ function DocPage() {
             )}
           </div>
 
-          {/* Content */}
-          <div className="prose prose-sm prose-invert max-w-none prose-headings:text-foreground prose-p:text-muted-foreground prose-strong:text-foreground prose-a:text-primary prose-a:no-underline hover:prose-a:underline prose-code:text-primary prose-code:bg-secondary prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-pre:bg-background prose-pre:border prose-pre:border-border/50 prose-ul:text-muted-foreground prose-li:marker:text-muted-foreground prose-li:text-muted-foreground">
+          <div className={`${proseClasses} prose-li:text-muted-foreground`}>
             <Markdown components={markdownComponents}>{doc.content}</Markdown>
           </div>
 
-          {/* Navigation */}
           <div className="mt-12 pt-8 border-t border-border/50 flex flex-col sm:flex-row justify-between gap-4">
             {prevDoc ? (
               <Link
@@ -213,19 +201,7 @@ function DocPage() {
               >
                 <span className="text-xs text-muted-foreground">Previous</span>
                 <div className="flex items-center gap-2 mt-1">
-                  <svg
-                    className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M15 19l-7-7 7-7"
-                    />
-                  </svg>
+                  <ChevronLeft className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                   <span className="font-medium text-foreground group-hover:text-primary transition-colors">
                     {prevDoc.title}
                   </span>
@@ -246,19 +222,7 @@ function DocPage() {
                   <span className="font-medium text-foreground group-hover:text-primary transition-colors">
                     {nextDoc.title}
                   </span>
-                  <svg
-                    className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
+                  <ChevronRight className="w-4 h-4 text-muted-foreground group-hover:text-primary transition-colors" />
                 </div>
               </Link>
             ) : (
@@ -267,7 +231,6 @@ function DocPage() {
           </div>
         </main>
 
-        {/* Table of contents */}
         <TableOfContents headings={headings} />
       </div>
     </section>

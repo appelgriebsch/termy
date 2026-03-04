@@ -1,38 +1,36 @@
 import { createRootRoute, Outlet } from "@tanstack/react-router";
+import type { JSX } from "react";
 import { Header } from "@/components/Header";
 
 export const Route = createRootRoute({
   component: RootLayout,
 });
 
-function RootLayout() {
+function RootLayout(): JSX.Element {
   return (
-    <div className="min-h-screen bg-background relative">
-      {/* Background gradient */}
-      <div className="fixed inset-0 -z-10 bg-background">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_12%,rgba(102,130,198,0.22),transparent_34%),radial-gradient(circle_at_76%_16%,rgba(77,174,247,0.14),transparent_28%),radial-gradient(circle_at_62%_78%,rgba(167,233,163,0.08),transparent_34%)]" />
-        <div className="absolute inset-0 grid-bg" />
-      </div>
+    <div className="min-h-screen bg-background">
       <Header />
       <main className="mx-auto w-full max-w-6xl px-6">
         <Outlet />
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-border/50 mt-24">
-        <div className="mx-auto max-w-6xl px-6 py-8">
+      <footer className="border-t border-border/30 mt-24">
+        <div className="mx-auto max-w-6xl px-6 py-6">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground/50">
               <img
-                src="https://raw.githubusercontent.com/lassejlv/termy/refs/heads/main/assets/termy_icon.png"
+                src="/termy_icon.png"
                 alt="Termy"
-                className="h-5 w-5 rounded"
+                width={16}
+                height={16}
+                className="rounded-sm opacity-50"
               />
-              <span>Termy</span>
-              <span className="text-border">-</span>
+              <span className="font-medium">Termy</span>
+              <span className="text-muted-foreground/20">/</span>
               <span>Open source terminal emulator</span>
             </div>
-            <div className="flex items-center gap-6 text-sm text-muted-foreground">
+            <div className="flex items-center gap-5 text-xs text-muted-foreground/40">
               <a
                 href="https://github.com/lassejlv/termy"
                 target="_blank"
