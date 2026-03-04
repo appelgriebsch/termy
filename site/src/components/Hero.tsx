@@ -17,8 +17,8 @@ export function Hero({ release }: HeroProps) {
         {/* Headline */}
         <div className="text-center max-w-4xl mx-auto px-6">
           <h1
-            className="text-5xl md:text-7xl font-bold tracking-tight animate-fade-up"
-            style={{ animationDelay: "100ms" }}
+            className="text-5xl md:text-7xl font-bold tracking-tight animate-blur-in"
+            style={{ animationDelay: "0ms" }}
           >
             The <span className="gradient-text">minimal</span>
             <br />
@@ -26,8 +26,8 @@ export function Hero({ release }: HeroProps) {
           </h1>
 
           <p
-            className="mt-6 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto animate-fade-up"
-            style={{ animationDelay: "200ms" }}
+            className="mt-6 text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto animate-blur-in"
+            style={{ animationDelay: "150ms" }}
           >
             Blazingly fast terminal emulator built with Rust. GPU-accelerated
             rendering, instant startup, and beautiful by default.
@@ -35,13 +35,13 @@ export function Hero({ release }: HeroProps) {
 
           {/* CTAs */}
           <div
-            className="mt-10 flex flex-wrap items-center justify-center gap-4 animate-fade-up"
+            className="mt-10 flex flex-wrap items-center justify-center gap-4 animate-blur-in"
             style={{ animationDelay: "300ms" }}
           >
             <Button
               size="lg"
               asChild
-              className="h-12 px-8 text-base font-medium rounded-xl glow-sm hover:scale-105 transition-transform"
+              className="h-12 px-8 text-base font-medium rounded-xl hover:scale-105 transition-transform"
             >
               <a href={preferredDownload?.browser_download_url ?? "#download"}>
                 <svg
@@ -64,7 +64,7 @@ export function Hero({ release }: HeroProps) {
               variant="outline"
               size="lg"
               asChild
-              className="h-12 px-8 text-base font-medium rounded-xl border-border/80 text-foreground hover:bg-secondary/50 hover:border-primary/50 transition-colors"
+              className="h-12 px-8 text-base font-medium rounded-xl border-border text-foreground hover:bg-secondary hover:border-primary/50 transition-colors"
             >
               <a
                 href="https://github.com/lassejlv/termy"
@@ -90,14 +90,14 @@ export function Hero({ release }: HeroProps) {
 
         {/* Terminal Preview */}
         <div
-          className="mt-20 mx-auto max-w-5xl px-6 animate-fade-up"
-          style={{ animationDelay: "400ms" }}
+          className="mt-20 mx-auto max-w-5xl px-6 animate-blur-in"
+          style={{ animationDelay: "450ms" }}
         >
-          <div className="terminal-window animate-float">
+          <div className="terminal-window">
             <div className="terminal-header">
-              <div className="terminal-dot bg-red-500" />
-              <div className="terminal-dot bg-yellow-500" />
-              <div className="terminal-dot bg-green-500" />
+              <div className="terminal-dot bg-red-500/80" />
+              <div className="terminal-dot bg-yellow-500/80" />
+              <div className="terminal-dot bg-green-500/80" />
               <span className="ml-3 text-xs text-muted-foreground font-mono">
                 termy
               </span>
@@ -108,7 +108,6 @@ export function Hero({ release }: HeroProps) {
                 alt="Termy in action"
                 className="w-full"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-card/80 to-transparent pointer-events-none" />
             </div>
           </div>
         </div>

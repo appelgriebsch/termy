@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Release, Asset } from "@/hooks/useGitHubRelease";
 import { classifyAssets, formatBytes } from "@/hooks/useGitHubRelease";
@@ -43,23 +44,25 @@ function PlatformButton({
   };
 
   return (
-    <a
-      href={assets[0].browser_download_url}
-      target="_blank"
-      rel="noreferrer"
-      className="flex items-center gap-3 p-4 rounded-xl border border-border/50 bg-card/50 hover:border-primary/50 hover:bg-card transition-all group"
-    >
-      <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-secondary text-muted-foreground group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-        {platformIcons[platform]}
-      </div>
-      <div className="flex-1">
-        <div className="font-medium text-foreground">{labels[platform]}</div>
-        <div className="text-xs text-muted-foreground">{assets[0].name}</div>
-      </div>
-      <svg className="w-5 h-5 text-muted-foreground group-hover:text-primary transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-      </svg>
-    </a>
+    <Card className="py-0 border-border/50 hover:border-primary/30 transition-colors">
+      <a
+        href={assets[0].browser_download_url}
+        target="_blank"
+        rel="noreferrer"
+        className="flex items-center gap-3 p-4"
+      >
+        <div className="flex items-center justify-center w-10 h-10 rounded-lg bg-primary/10 text-primary">
+          {platformIcons[platform]}
+        </div>
+        <div className="flex-1">
+          <div className="font-medium text-foreground">{labels[platform]}</div>
+          <div className="text-xs text-muted-foreground">{assets[0].name}</div>
+        </div>
+        <svg className="w-5 h-5 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        </svg>
+      </a>
+    </Card>
   );
 }
 
@@ -76,9 +79,9 @@ function AssetList({ title, assets }: { title: string; assets: Asset[] }) {
             href={asset.browser_download_url}
             target="_blank"
             rel="noreferrer"
-            className="flex items-center justify-between p-3 rounded-lg border border-border/50 hover:border-primary/30 bg-card/30 hover:bg-card/50 transition-all text-sm group"
+            className="flex items-center justify-between p-3 rounded-lg border border-border/50 hover:border-primary/30 bg-card/50 transition-colors text-sm"
           >
-            <span className="font-mono text-muted-foreground group-hover:text-foreground transition-colors truncate">
+            <span className="font-mono text-muted-foreground hover:text-foreground transition-colors truncate">
               {asset.name}
             </span>
             <span className="text-xs text-muted-foreground ml-4 shrink-0">
@@ -104,7 +107,10 @@ export function Download({ release, loading, error }: DownloadProps) {
 
   return (
     <section id="download" className="py-24">
-      <div className="text-center mb-16">
+      <div
+        className="text-center mb-16 animate-blur-in"
+        style={{ animationDelay: "0ms" }}
+      >
         <h2 className="text-3xl md:text-4xl font-bold mb-4">
           Get Termy
         </h2>
@@ -126,7 +132,7 @@ export function Download({ release, loading, error }: DownloadProps) {
       )}
 
       {!loading && !error && release && (
-        <div className="max-w-3xl mx-auto">
+        <div className="max-w-3xl mx-auto animate-blur-in" style={{ animationDelay: "100ms" }}>
           {/* Version badge */}
           <div className="flex items-center justify-center gap-3 mb-8">
             <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
@@ -146,57 +152,66 @@ export function Download({ release, loading, error }: DownloadProps) {
             <PlatformButton platform="linux" assets={classified?.linux ?? []} />
           </div>
 
-          <div className="mb-12 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
-            <p className="mb-2 text-sm text-amber-200">
-              Termy is not code signed yet.
-            </p>
-            <p className="text-sm text-amber-100/90">
-              On macOS, if Gatekeeper blocks launch after moving Termy to
-              Applications, run{" "}
-              <code className="rounded bg-background px-1.5 py-0.5 text-primary">
-                sudo xattr -d com.apple.quarantine /Applications/Termy.app
-              </code>
-              .
-            </p>
-            <p className="mt-2 text-sm text-amber-100/90">
-              On Windows, click <strong>More info</strong> and then{" "}
-              <strong>Run anyway</strong> in the SmartScreen prompt.
-            </p>
-          </div>
+          {/* Warning box — neutral with subtle yellow indicator */}
+          <Card className="mb-12 py-0 border-border">
+            <CardContent className="p-4">
+              <div className="flex gap-3">
+                <div className="mt-0.5 shrink-0 w-1 rounded-full bg-amber-500" />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-foreground">
+                    Termy is not code signed yet.
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    On macOS, if Gatekeeper blocks launch after moving Termy to
+                    Applications, run{" "}
+                    <code className="rounded bg-secondary px-1.5 py-0.5 text-primary text-xs font-mono">
+                      sudo xattr -d com.apple.quarantine /Applications/Termy.app
+                    </code>
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    On Windows, click <strong className="text-foreground">More info</strong> and then{" "}
+                    <strong className="text-foreground">Run anyway</strong> in the SmartScreen prompt.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Install via package manager */}
-          <div className="mb-12 p-4 rounded-xl border border-border/50 bg-card/30">
-            <p className="text-sm text-muted-foreground mb-3">
-              Or install via package manager:
-            </p>
-            <Tabs defaultValue="homebrew" className="w-full">
-              <TabsList variant="line" className="mb-3">
-                <TabsTrigger value="homebrew">Homebrew</TabsTrigger>
-                <TabsTrigger value="arch">Arch Linux</TabsTrigger>
-              </TabsList>
-              <TabsContent value="homebrew">
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2 p-3 rounded-lg bg-background font-mono text-sm">
-                    <code className="flex-1 text-primary">
-                      brew tap lassejlv/termy https://github.com/lassejlv/termy
+          <Card className="mb-12 py-0 border-border/50">
+            <CardContent className="p-4">
+              <p className="text-sm text-muted-foreground mb-3">
+                Or install via package manager:
+              </p>
+              <Tabs defaultValue="homebrew" className="w-full">
+                <TabsList variant="line" className="mb-3">
+                  <TabsTrigger value="homebrew">Homebrew</TabsTrigger>
+                  <TabsTrigger value="arch">Arch Linux</TabsTrigger>
+                </TabsList>
+                <TabsContent value="homebrew">
+                  <div className="space-y-2">
+                    <div className="p-3 rounded-lg bg-secondary font-mono text-sm">
+                      <code className="text-primary">
+                        brew tap lassejlv/termy https://github.com/lassejlv/termy
+                      </code>
+                    </div>
+                    <div className="p-3 rounded-lg bg-secondary font-mono text-sm">
+                      <code className="text-primary">
+                        brew install --cask termy
+                      </code>
+                    </div>
+                  </div>
+                </TabsContent>
+                <TabsContent value="arch">
+                  <div className="p-3 rounded-lg bg-secondary font-mono text-sm">
+                    <code className="text-primary">
+                      paru -S termy-bin
                     </code>
                   </div>
-                  <div className="flex items-center gap-2 p-3 rounded-lg bg-background font-mono text-sm">
-                    <code className="flex-1 text-primary">
-                      brew install --cask termy
-                    </code>
-                  </div>
-                </div>
-              </TabsContent>
-              <TabsContent value="arch">
-                <div className="flex items-center gap-2 p-3 rounded-lg bg-background font-mono text-sm">
-                  <code className="flex-1 text-primary">
-                    paru -S termy-bin
-                  </code>
-                </div>
-              </TabsContent>
-            </Tabs>
-          </div>
+                </TabsContent>
+              </Tabs>
+            </CardContent>
+          </Card>
 
           {/* All downloads */}
           <details className="group">
