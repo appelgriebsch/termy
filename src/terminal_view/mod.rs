@@ -9,6 +9,7 @@ use crate::keybindings;
 use crate::ui::scrollbar::{ScrollbarVisibilityController, ScrollbarVisibilityMode};
 use alacritty_terminal::term::cell::Flags;
 use flume::{Sender, bounded};
+use gpui::AppContext;
 use gpui::{
     AnyElement, App, AsyncApp, ClipboardItem, Context, Element, Entity, ExternalPaths, FocusHandle,
     Focusable, Font, FontWeight, InteractiveElement, IntoElement, KeyDownEvent, MouseButton,
@@ -25,6 +26,8 @@ use std::{
     sync::Mutex,
     time::{Duration, Instant},
 };
+#[cfg(target_os = "macos")]
+use termy_auto_update::{AutoUpdater, UpdateState};
 use termy_search::SearchState;
 use termy_terminal_ui::{
     CellRenderInfo, PaneTerminal, TabTitleShellIntegration, Terminal as NativeTerminal,
@@ -38,10 +41,7 @@ use termy_terminal_ui::{
     TerminalUiRenderMetricsSnapshot, terminal_ui_render_metrics_reset,
     terminal_ui_render_metrics_snapshot,
 };
-use gpui::AppContext;
 use termy_toast::ToastManager;
-#[cfg(target_os = "macos")]
-use termy_auto_update::{AutoUpdater, UpdateState};
 
 mod ai_input;
 mod command_palette;
@@ -1118,7 +1118,10 @@ impl TerminalView {
             return None;
         }
 
-        if let Some(prompt) = value.rsplit_once("prompt:").map(|(_, prompt)| prompt.trim()) {
+        if let Some(prompt) = value
+            .rsplit_once("prompt:")
+            .map(|(_, prompt)| prompt.trim())
+        {
             if !prompt.is_empty() {
                 return Some(prompt);
             }
@@ -1138,10 +1141,7 @@ impl TerminalView {
             || value == "~"
             || value.starts_with("~/")
             || value.starts_with("~\\")
-            || value
-                .chars()
-                .nth(1)
-                .is_some_and(|ch| ch == ':')
+            || value.chars().nth(1).is_some_and(|ch| ch == ':')
                 && value
                     .chars()
                     .next()
@@ -1181,11 +1181,7 @@ impl TerminalView {
             None
         }
 
-        #[cfg(not(any(
-            target_os = "linux",
-            target_os = "android",
-            target_os = "macos"
-        )))]
+        #[cfg(not(any(target_os = "linux", target_os = "android", target_os = "macos")))]
         {
             let _ = pid;
             None
@@ -1229,8 +1225,8 @@ impl TerminalView {
             .get(&pid)
             .map(|entry| (entry.value.clone(), entry.resolved_at))
         {
-            let is_fresh =
-                Instant::now().saturating_duration_since(resolved_at) <= CHILD_WORKING_DIR_CACHE_TTL;
+            let is_fresh = Instant::now().saturating_duration_since(resolved_at)
+                <= CHILD_WORKING_DIR_CACHE_TTL;
             if !is_fresh {
                 self.schedule_child_working_dir_lookup(pid, cx);
             }
@@ -1241,9 +1237,15 @@ impl TerminalView {
         None
     }
 
-    fn preferred_working_dir_for_new_native_session(&mut self, cx: &mut Context<Self>) -> Option<String> {
+    fn preferred_working_dir_for_new_native_session(
+        &mut self,
+        cx: &mut Context<Self>,
+    ) -> Option<String> {
         let active_tab = self.active_tab;
-        let prompt_cwd = self.tabs.get(active_tab).and_then(|tab| tab.last_prompt_cwd.clone());
+        let prompt_cwd = self
+            .tabs
+            .get(active_tab)
+            .and_then(|tab| tab.last_prompt_cwd.clone());
         let process_cwd = self
             .tabs
             .get(active_tab)

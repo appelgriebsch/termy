@@ -242,8 +242,7 @@ impl TerminalView {
                     .active_terminal()
                     .map(|terminal| terminal.size())
                     .unwrap_or_default();
-                let preferred_working_dir =
-                    self.preferred_working_dir_for_new_native_session(cx);
+                let preferred_working_dir = self.preferred_working_dir_for_new_native_session(cx);
                 let terminal = match Terminal::new_native(
                     size,
                     preferred_working_dir.as_deref(),
