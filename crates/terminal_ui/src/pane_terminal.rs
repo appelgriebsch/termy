@@ -7,7 +7,11 @@ use alacritty_terminal::{
 };
 use std::sync::Arc;
 
-use crate::runtime::{TerminalDamageSnapshot, TerminalSize, take_term_damage_snapshot};
+use crate::mouse_protocol::TerminalMouseMode;
+use crate::runtime::{
+    TerminalDamageSnapshot, TerminalSize, take_term_damage_snapshot,
+    termmode_to_terminal_mouse_mode,
+};
 
 struct PaneTerminalInner {
     term: Arc<FairMutex<Term<VoidListener>>>,
@@ -168,6 +172,12 @@ impl PaneTerminal {
         term.lock().mode().contains(TermMode::BRACKETED_PASTE)
     }
 
+    pub fn mouse_mode(&self) -> TerminalMouseMode {
+        let term = self.cloned_term_arc();
+        let mode = *term.lock().mode();
+        termmode_to_terminal_mouse_mode(mode)
+    }
+
     pub fn alternate_screen_mode(&self) -> bool {
         let term = self.cloned_term_arc();
         term.lock().mode().contains(TermMode::ALT_SCREEN)
@@ -314,5 +324,48 @@ mod tests {
         let size = terminal.size();
         assert_eq!(size.cols, 9);
         assert_eq!(size.rows, 7);
+    }
+
+    #[test]
+    fn mouse_mode_detects_click_and_sgr_flags_from_output_stream() {
+        let terminal = PaneTerminal::new(
+            TerminalSize {
+                cols: 4,
+                rows: 3,
+                ..TerminalSize::default()
+            },
+            2000,
+        );
+
+        terminal.feed_output(b"\x1b[?1000h\x1b[?1006h");
+        let mode = terminal.mouse_mode();
+        assert!(mode.enabled);
+        assert!(mode.report_click);
+        assert!(mode.sgr_encoding);
+        assert!(!mode.report_drag);
+        assert!(!mode.report_motion);
+    }
+
+    #[test]
+    fn mouse_mode_detects_drag_and_motion_flags_from_output_stream() {
+        let terminal = PaneTerminal::new(
+            TerminalSize {
+                cols: 4,
+                rows: 3,
+                ..TerminalSize::default()
+            },
+            2000,
+        );
+
+        terminal.feed_output(b"\x1b[?1002h");
+        let drag_mode = terminal.mouse_mode();
+        assert!(drag_mode.enabled);
+        assert!(drag_mode.report_drag);
+        assert!(!drag_mode.report_motion);
+
+        terminal.feed_output(b"\x1b[?1003h");
+        let motion_mode = terminal.mouse_mode();
+        assert!(motion_mode.enabled);
+        assert!(motion_mode.report_motion);
     }
 }

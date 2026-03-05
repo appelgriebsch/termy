@@ -32,9 +32,9 @@ use termy_search::SearchState;
 use termy_terminal_ui::{
     CellRenderInfo, PaneTerminal, TabTitleShellIntegration, Terminal as NativeTerminal,
     TerminalCursorStyle, TerminalDamageSnapshot, TerminalDirtySpan, TerminalEvent, TerminalGrid,
-    TerminalGridPaintCacheHandle, TerminalGridPaintDamage, TerminalGridRows, TerminalRuntimeConfig,
-    TerminalSize, TmuxLaunchTarget, WorkingDirFallback as RuntimeWorkingDirFallback,
-    find_link_in_line, keystroke_to_input,
+    TerminalGridPaintCacheHandle, TerminalGridPaintDamage, TerminalGridRows, TerminalMouseMode,
+    TerminalRuntimeConfig, TerminalSize, TmuxLaunchTarget,
+    WorkingDirFallback as RuntimeWorkingDirFallback, find_link_in_line, keystroke_to_input,
 };
 #[cfg(debug_assertions)]
 use termy_terminal_ui::{
@@ -225,6 +225,23 @@ impl TerminalScrollbarMarkerCache {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+struct MouseReportTargetCell {
+    pane_id: String,
+    col: usize,
+    row: usize,
+}
+
+#[derive(Clone, Debug, Default)]
+struct MouseReportingState {
+    left_button: Option<MouseReportTargetCell>,
+    middle_button: Option<MouseReportTargetCell>,
+    right_button: Option<MouseReportTargetCell>,
+    hover_target: Option<MouseReportTargetCell>,
+    scroll_accumulator_x: f32,
+    scroll_accumulator_y: f32,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct PaneFocusTarget {
     tab_id: TabId,
     pane_id: String,
@@ -396,6 +413,16 @@ impl Terminal {
                 .lock()
                 .map(|terminal| terminal.alternate_screen_mode())
                 .unwrap_or(false),
+        }
+    }
+
+    fn mouse_mode(&self) -> TerminalMouseMode {
+        match self {
+            Self::Tmux(terminal) => terminal.mouse_mode(),
+            Self::Native(terminal) => terminal
+                .lock()
+                .map(|terminal| terminal.mouse_mode())
+                .unwrap_or_default(),
         }
     }
 
@@ -965,6 +992,7 @@ pub struct TerminalView {
     install_cli_available: bool,
     tab_strip: TabStripState,
     inline_input_selecting: bool,
+    mouse_reporting: MouseReportingState,
     terminal_scroll_accumulator_y: f32,
     input_scroll_suppress_until: Option<Instant>,
     last_tmux_resize_error_at: Option<Instant>,
@@ -1761,6 +1789,7 @@ impl TerminalView {
 
     pub fn new(window: &mut Window, cx: &mut Context<Self>, config: AppConfig) -> Self {
         let focus_handle = cx.focus_handle();
+        let blur_focus_handle = focus_handle.clone();
         let (event_wakeup_tx, event_wakeup_rx) = bounded(1);
         let config_change_rx = config::subscribe_config_changes();
 
@@ -1956,6 +1985,7 @@ impl TerminalView {
             install_cli_available: Self::install_cli_available_from_system(),
             tab_strip: TabStripState::new(),
             inline_input_selecting: false,
+            mouse_reporting: MouseReportingState::default(),
             terminal_scroll_accumulator_y: 0.0,
             input_scroll_suppress_until: None,
             last_tmux_resize_error_at: None,
@@ -2010,6 +2040,18 @@ impl TerminalView {
                 }
             }
         }
+        cx.observe_window_activation(window, |view, window, cx| {
+            if !window.is_window_active() && view.release_all_forwarded_mouse_presses() {
+                cx.notify();
+            }
+        })
+        .detach();
+        cx.on_blur(&blur_focus_handle, window, |view, _window, cx| {
+            if view.release_all_forwarded_mouse_presses() {
+                cx.notify();
+            }
+        })
+        .detach();
 
         #[cfg(target_os = "macos")]
         if config.auto_update {
