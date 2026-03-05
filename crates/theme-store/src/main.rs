@@ -42,6 +42,7 @@ struct AuthConfig {
     github_client_secret: String,
     github_redirect_uri: String,
     session_cookie_secure: bool,
+    session_cookie_domain: Option<String>,
     session_ttl_hours: i64,
     post_auth_redirect: Option<String>,
 }
@@ -74,6 +75,10 @@ async fn main() -> anyhow::Result<()> {
             .map(|value| parse_bool_env(&value, "SESSION_COOKIE_SECURE"))
             .transpose()?
             .unwrap_or(false),
+        session_cookie_domain: env::var("SESSION_COOKIE_DOMAIN")
+            .ok()
+            .map(|value| value.trim().to_string())
+            .filter(|value| !value.is_empty()),
         session_ttl_hours: env::var("SESSION_TTL_HOURS")
             .ok()
             .map(|value| parse_i64_env(&value, "SESSION_TTL_HOURS"))
@@ -446,6 +451,7 @@ async fn auth_github_callback(
         &token,
         state.auth.session_ttl_hours,
         state.auth.session_cookie_secure,
+        state.auth.session_cookie_domain.as_deref(),
     );
 
     let target = redirect_to
@@ -485,8 +491,11 @@ async fn auth_logout(
     let mut response = StatusCode::NO_CONTENT.into_response();
     response.headers_mut().append(
         header::SET_COOKIE,
-        HeaderValue::from_str(&clear_session_cookie(state.auth.session_cookie_secure))
-            .map_err(|_| ApiError::ExternalAuth("failed to clear session cookie".to_string()))?,
+        HeaderValue::from_str(&clear_session_cookie(
+            state.auth.session_cookie_secure,
+            state.auth.session_cookie_domain.as_deref(),
+        ))
+        .map_err(|_| ApiError::ExternalAuth("failed to clear session cookie".to_string()))?,
     );
 
     Ok(response)
@@ -1348,21 +1357,29 @@ fn extract_cookie(headers: &HeaderMap, cookie_name: &str) -> Option<String> {
     None
 }
 
-fn build_session_cookie(token: &str, ttl_hours: i64, secure: bool) -> String {
+fn build_session_cookie(token: &str, ttl_hours: i64, secure: bool, domain: Option<&str>) -> String {
     let secure_flag = if secure { "; Secure" } else { "" };
+    let domain_flag = domain
+        .map(|value| format!("; Domain={value}"))
+        .unwrap_or_default();
     format!(
-        "{name}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}{secure}",
+        "{name}={token}; Path=/; HttpOnly; SameSite=Lax; Max-Age={max_age}{domain}{secure}",
         name = SESSION_COOKIE_NAME,
         max_age = ttl_hours * 3600,
+        domain = domain_flag,
         secure = secure_flag,
     )
 }
 
-fn clear_session_cookie(secure: bool) -> String {
+fn clear_session_cookie(secure: bool, domain: Option<&str>) -> String {
     let secure_flag = if secure { "; Secure" } else { "" };
+    let domain_flag = domain
+        .map(|value| format!("; Domain={value}"))
+        .unwrap_or_default();
     format!(
-        "{name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{secure}",
+        "{name}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0{domain}{secure}",
         name = SESSION_COOKIE_NAME,
+        domain = domain_flag,
         secure = secure_flag,
     )
 }
