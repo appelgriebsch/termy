@@ -22,6 +22,7 @@ import {
   NavigationMenuTrigger,
 } from "@/components/ui/navigation-menu";
 import { useTheme } from "@/hooks/useTheme";
+import { GitHubStarsButton } from "./animate-ui/components/buttons/github-stars";
 
 type NavLink =
   | { label: string; href: string; to?: never; external?: boolean }
@@ -233,6 +234,14 @@ export function Header(): JSX.Element {
                       Docs
                     </Link>
                   </NavigationMenuLink>
+                </NavigationMenuItem>
+                <NavigationMenuItem>
+                  <GitHubStarsButton
+                    variant="outline"
+                    size="sm"
+                    username="lassejlv"
+                    repo="termy"
+                  />
                 </NavigationMenuItem>
               </NavigationMenuList>
             </NavigationMenu>
