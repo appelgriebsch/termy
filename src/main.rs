@@ -95,11 +95,7 @@ fn open_main_window(cx: &mut App, startup_config: config::AppConfig) -> Result<(
         traffic_light_position: Some(gpui::point(px(12.0), px(10.0))),
     });
     #[cfg(target_os = "windows")]
-    let titlebar = Some(gpui::TitlebarOptions {
-        title: None,
-        appears_transparent: true,
-        traffic_light_position: None,
-    });
+    let titlebar = None;
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
     let titlebar = Some(gpui::TitlebarOptions {
         title: None,
@@ -301,6 +297,7 @@ fn main() {
 
     let (deeplink_tx, deeplink_rx) = flume::unbounded::<Vec<String>>();
     let application = Application::new();
+
     application.on_reopen(|cx| {
         let _ = reopen_if_no_windows(cx, reopen_main_window);
     });
