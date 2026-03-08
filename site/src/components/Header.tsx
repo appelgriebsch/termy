@@ -241,6 +241,11 @@ export function Header(): JSX.Element {
                     size="sm"
                     username="lassejlv"
                     repo="termy"
+                    onClick={() =>
+                      window.location.replace(
+                        "https://github.com/lassejlv/termy",
+                      )
+                    }
                   />
                 </NavigationMenuItem>
               </NavigationMenuList>
