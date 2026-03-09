@@ -249,7 +249,19 @@ impl TerminalView {
         window: &Window,
         cell_size: Size<Pixels>,
     ) {
-        let (padding_x, padding_y) = self.effective_terminal_padding();
+        // Use stable padding for PTY sizing that does NOT depend on alternate_screen_mode.
+        // This prevents resize feedback loops when TUI apps (e.g. lazygit) toggle between
+        // alternate and normal screen buffers.  Visual padding is handled separately by
+        // effective_terminal_padding / native_split_content_padding in the render path.
+        let (padding_x, padding_y) = if self
+            .tabs
+            .get(self.active_tab)
+            .is_some_and(|tab| tab.panes.len() > 1)
+        {
+            (0.0, 0.0)
+        } else {
+            (self.padding_x, self.padding_y)
+        };
         let viewport = window.viewport_size();
         let viewport_width: f32 = viewport.width.into();
         let viewport_height: f32 = viewport.height.into();
@@ -265,11 +277,7 @@ impl TerminalView {
         let terminal_height =
             (viewport_height - self.chrome_height() - (padding_y * 2.0)).max(cell_height);
         let backend_mode = self.runtime_kind();
-        let edge_to_edge_grid = !backend_mode.uses_tmux()
-            && self
-                .active_terminal()
-                .is_some_and(|terminal| terminal.alternate_screen_mode());
-        let cols = Self::compute_terminal_cols(terminal_width, cell_width, edge_to_edge_grid);
+        let cols = Self::compute_terminal_cols(terminal_width, cell_width, false);
         let rows = Self::compute_terminal_rows(terminal_height, cell_height);
 
         match backend_mode {
@@ -293,11 +301,8 @@ impl TerminalView {
         }
 
         for tab in &self.tabs {
-            let tab_uses_native_split_padding = !self.runtime_uses_tmux()
-                && tab.panes.len() > 1
-                && !tab
-                    .active_terminal()
-                    .is_some_and(|terminal| terminal.alternate_screen_mode());
+            let tab_uses_native_split_padding =
+                !self.runtime_uses_tmux() && tab.panes.len() > 1;
             let (content_padding_x, content_padding_y) = if tab_uses_native_split_padding {
                 (self.padding_x, self.padding_y)
             } else {
