@@ -730,6 +730,7 @@ mod tests {
                 degraded: false,
                 terminal: left_terminal,
                 render_cache: std::cell::RefCell::new(TerminalPaneRenderCache::default()),
+                last_alternate_screen: std::cell::Cell::new(false),
             },
             TerminalPane {
                 id: "%right".to_string(),
@@ -740,6 +741,7 @@ mod tests {
                 degraded: false,
                 terminal: right_terminal,
                 render_cache: std::cell::RefCell::new(TerminalPaneRenderCache::default()),
+                last_alternate_screen: std::cell::Cell::new(false),
             },
         ];
 
@@ -803,6 +805,7 @@ mod tests {
                 degraded: false,
                 terminal: left_terminal,
                 render_cache: std::cell::RefCell::new(TerminalPaneRenderCache::default()),
+                last_alternate_screen: std::cell::Cell::new(false),
             },
             TerminalPane {
                 id: "%right".to_string(),
@@ -813,6 +816,7 @@ mod tests {
                 degraded: false,
                 terminal: right_terminal,
                 render_cache: std::cell::RefCell::new(TerminalPaneRenderCache::default()),
+                last_alternate_screen: std::cell::Cell::new(false),
             },
         ];
 

@@ -19,7 +19,7 @@ use gpui::{
     div, point, px,
 };
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
     env,
     path::{Path, PathBuf},
@@ -539,6 +539,9 @@ struct TerminalPane {
     degraded: bool,
     terminal: Terminal,
     render_cache: RefCell<TerminalPaneRenderCache>,
+    /// Tracks the previous alternate-screen state so that transitions can be
+    /// detected during `sync_terminal_size` and a SIGWINCH nudge sent.
+    last_alternate_screen: Cell<bool>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1494,6 +1497,7 @@ impl TerminalView {
             degraded: false,
             terminal,
             render_cache: RefCell::new(TerminalPaneRenderCache::default()),
+            last_alternate_screen: Cell::new(false),
         };
         TerminalTab {
             id: tab_id,

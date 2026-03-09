@@ -89,6 +89,7 @@ impl TerminalPane {
             degraded,
             terminal,
             render_cache: std::cell::RefCell::new(TerminalPaneRenderCache::default()),
+            last_alternate_screen: std::cell::Cell::new(false),
         }
     }
 }

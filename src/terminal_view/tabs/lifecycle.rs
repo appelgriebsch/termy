@@ -873,6 +873,7 @@ impl TerminalView {
             degraded: false,
             terminal,
             render_cache: RefCell::new(TerminalPaneRenderCache::default()),
+            last_alternate_screen: Cell::new(false),
         };
 
         tab.panes.insert(active_index + 1, split_pane);
