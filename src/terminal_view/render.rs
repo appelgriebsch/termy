@@ -4,7 +4,7 @@ use crate::ui::scrollbar::{self as ui_scrollbar, ScrollbarPaintStyle};
 use alacritty_terminal::grid::Dimensions;
 use alacritty_terminal::index::{Column, Line};
 use gpui::prelude::FluentBuilder;
-use gpui::{canvas, ElementInputHandler};
+use gpui::{ElementInputHandler, canvas};
 use std::sync::Arc;
 
 fn cell_ranges_overlap(start_a: u32, end_a: u32, start_b: u32, end_b: u32) -> bool {
