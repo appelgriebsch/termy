@@ -96,7 +96,11 @@ fn open_main_window(cx: &mut App, startup_config: config::AppConfig) -> Result<(
         traffic_light_position: Some(gpui::point(px(12.0), px(10.0))),
     });
     #[cfg(target_os = "windows")]
-    let titlebar = None;
+    let titlebar = Some(gpui::TitlebarOptions {
+        title: Some("Termy".into()),
+        appears_transparent: false,
+        traffic_light_position: None,
+    });
     #[cfg(all(not(target_os = "macos"), not(target_os = "windows")))]
     let titlebar = Some(gpui::TitlebarOptions {
         title: None,

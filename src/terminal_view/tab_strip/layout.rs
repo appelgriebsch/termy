@@ -2,6 +2,8 @@ use super::super::*;
 
 pub(crate) const TAB_STRIP_RAIL_GUTTER_WIDTH: f32 = 2.0;
 const TAB_STRIP_LAYOUT_EPSILON: f32 = 0.001;
+#[cfg(target_os = "windows")]
+const WINDOWS_CAPTION_BUTTONS_RESERVED_WIDTH: f32 = 140.0;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub(crate) struct TabStripGeometry {
@@ -78,6 +80,16 @@ impl TabStripGeometry {
 }
 
 impl TerminalView {
+    #[cfg(target_os = "windows")]
+    fn titlebar_right_padding_for_platform() -> f32 {
+        WINDOWS_CAPTION_BUTTONS_RESERVED_WIDTH
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    fn titlebar_right_padding_for_platform() -> f32 {
+        TOP_STRIP_SIDE_PADDING
+    }
+
     pub(crate) fn titlebar_left_padding_for_platform() -> f32 {
         if cfg!(target_os = "macos") {
             TOP_STRIP_MACOS_TRAFFIC_LIGHT_PADDING
@@ -90,7 +102,8 @@ impl TerminalView {
         let window_width = input.viewport_width.max(0.0);
         let left_inset_width = input.left_inset_width.max(0.0).min(window_width);
         let remaining_after_left = (window_width - left_inset_width).max(0.0);
-        let right_inset_width = TOP_STRIP_SIDE_PADDING.min(remaining_after_left);
+        let right_inset_width =
+            Self::titlebar_right_padding_for_platform().min(remaining_after_left);
         let row_width = (remaining_after_left - right_inset_width).max(0.0);
         let row_start_x = left_inset_width;
         let row_end_x = row_start_x + row_width;
