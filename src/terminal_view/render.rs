@@ -1747,6 +1747,31 @@ impl TerminalView {
             })
             .detach();
         }
+        if !self.runtime_uses_tmux()
+            && self
+                .active_terminal()
+                .is_some_and(|terminal| terminal.alternate_screen_mode())
+            && !self.alt_screen_refresh_scheduled
+        {
+            self.alt_screen_refresh_scheduled = true;
+            cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+                smol::Timer::after(Duration::from_millis(ALT_SCREEN_POLL_FRAME_MS)).await;
+                let _ = cx.update(|cx| {
+                    this.update(cx, |view, cx| {
+                        view.alt_screen_refresh_scheduled = false;
+                        let polled_events = view.process_terminal_events(cx);
+                        if polled_events
+                            || view
+                                .active_terminal()
+                                .is_some_and(|terminal| terminal.alternate_screen_mode())
+                        {
+                            cx.notify();
+                        }
+                    })
+                });
+            })
+            .detach();
+        }
 
         let colors = self.colors.clone();
         let command_palette_overlay = if self.is_command_palette_open() {
@@ -2674,6 +2699,7 @@ mod tests {
                 },
             ),
             render_cache: std::cell::RefCell::new(TerminalPaneRenderCache::default()),
+            last_alternate_screen: std::cell::Cell::new(false),
         }
     }
 

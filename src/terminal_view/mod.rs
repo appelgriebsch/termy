@@ -19,7 +19,7 @@ use gpui::{
     div, point, px,
 };
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
     env,
     path::{Path, PathBuf},
@@ -127,6 +127,7 @@ const TMUX_UNSUPPORTED_WINDOWS_TOAST: &str =
 const INPUT_SCROLL_SUPPRESS_MS: u64 = 160;
 const TOAST_COPY_FEEDBACK_MS: u64 = 1200;
 const WINDOW_RESIZE_INDICATOR_MS: u64 = 850;
+const ALT_SCREEN_POLL_FRAME_MS: u64 = 33;
 const CHILD_WORKING_DIR_CACHE_TTL: Duration = Duration::from_millis(CHILD_WORKING_DIR_CACHE_TTL_MS);
 const OVERLAY_PANEL_ALPHA_FLOOR_RATIO: f32 = 0.72;
 const OVERLAY_PANEL_BORDER_ALPHA: f32 = 0.24;
@@ -361,6 +362,15 @@ impl Terminal {
         }
     }
 
+    /// Re-send the current PTY size to deliver SIGWINCH without changing dimensions.
+    fn nudge_resize(&self) {
+        if let Self::Native(terminal) = self
+            && let Ok(terminal) = terminal.lock()
+        {
+            terminal.nudge_resize();
+        }
+    }
+
     fn size(&self) -> TerminalSize {
         match self {
             Self::Tmux(terminal) => terminal.size(),
@@ -530,6 +540,9 @@ struct TerminalPane {
     degraded: bool,
     terminal: Terminal,
     render_cache: RefCell<TerminalPaneRenderCache>,
+    /// Tracks the previous alternate-screen state so that transitions can be
+    /// detected during `sync_terminal_size` and a SIGWINCH nudge sent.
+    last_alternate_screen: Cell<bool>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1115,6 +1128,7 @@ pub struct TerminalView {
     resize_indicator_dims: Option<(u16, u16)>,
     resize_indicator_visible_until: Option<Instant>,
     resize_indicator_animation_scheduled: bool,
+    alt_screen_refresh_scheduled: bool,
     show_debug_overlay: bool,
     debug_overlay_stats: DebugOverlayStats,
     install_cli_available: bool,
@@ -1485,6 +1499,7 @@ impl TerminalView {
             degraded: false,
             terminal,
             render_cache: RefCell::new(TerminalPaneRenderCache::default()),
+            last_alternate_screen: Cell::new(false),
         };
         TerminalTab {
             id: tab_id,
@@ -2259,6 +2274,7 @@ impl TerminalView {
             resize_indicator_dims: None,
             resize_indicator_visible_until: None,
             resize_indicator_animation_scheduled: false,
+            alt_screen_refresh_scheduled: false,
             show_debug_overlay: config.show_debug_overlay,
             debug_overlay_stats: DebugOverlayStats::new(),
             install_cli_available: Self::install_cli_available_from_system(),
