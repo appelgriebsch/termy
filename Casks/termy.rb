@@ -1,9 +1,9 @@
 cask "termy" do
   arch arm: "arm64", intel: "x86_64"
 
-  version "0.1.50"
-  sha256 arm:   "35f2aceeff6d2cbc5c440861d2adae2fcb7a16654ac11770a1ff0713cf135b78",
-         intel: "fba85113aefa32ad5a278b33da1e7e690630579e41c12a04e96520049c6191e9"
+  version "0.1.51"
+  sha256 arm:   "f0007ff231efb3530b1b39cc346b2b897cd6905d48916f0f3b0fd0ec8bd31c12",
+         intel: "7853967938f719eff9d1d64bfafdcb9730f9f8dd28b2c972ce36fe245a4caf4d"
 
   url "https://github.com/lassejlv/termy/releases/download/v#{version}/Termy-v#{version}-macos-#{arch}.dmg"
   name "Termy"
