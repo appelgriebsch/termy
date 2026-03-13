@@ -71,6 +71,7 @@ pub struct TerminalGrid {
     pub rows: usize,
     /// Clear color used to reset the grid surface every frame.
     pub clear_bg: Hsla,
+    pub terminal_surface_bg: Hsla,
     pub cursor_color: Hsla,
     pub selection_bg: Hsla,
     pub selection_fg: Hsla,
@@ -195,6 +196,7 @@ struct GridPaintStyleKey {
     cell_width_bits: u32,
     cell_height_bits: u32,
     clear_bg: [u32; 4],
+    terminal_surface_bg: [u32; 4],
     selection_bg: [u32; 4],
     selection_fg: [u32; 4],
     search_match_bg: [u32; 4],
@@ -535,6 +537,7 @@ impl TerminalGrid {
             cell_width_bits: Into::<f32>::into(self.cell_size.width).to_bits(),
             cell_height_bits: Into::<f32>::into(self.cell_size.height).to_bits(),
             clear_bg: hsla_bits(self.clear_bg),
+            terminal_surface_bg: hsla_bits(self.terminal_surface_bg),
             selection_bg: hsla_bits(self.selection_bg),
             selection_fg: hsla_bits(self.selection_fg),
             search_match_bg: hsla_bits(self.search_match_bg),
@@ -552,10 +555,12 @@ impl TerminalGrid {
             Some(self.search_current_bg)
         } else if cell.search_match {
             Some(self.search_match_bg)
-        } else if !cell.uses_terminal_default_bg && cell.bg.a > 0.01 {
-            Some(cell.bg)
-        } else {
+        } else if cell.bg.a <= 0.01 {
             None
+        } else if cell.uses_terminal_default_bg {
+            (cell.bg != self.terminal_surface_bg).then_some(cell.bg)
+        } else {
+            Some(cell.bg)
         }
     }
 
@@ -1098,6 +1103,7 @@ mod tests {
             cols: 120,
             rows: 40,
             clear_bg: Hsla::transparent_black(),
+            terminal_surface_bg: test_color(0.0, 0.0, 0.0),
             cursor_color: test_color(0.1, 0.1, 0.1),
             selection_bg: test_color(0.2, 0.2, 0.2),
             selection_fg: test_color(0.3, 0.3, 0.3),
@@ -1513,19 +1519,36 @@ mod tests {
     }
 
     #[test]
-    fn row_background_spans_skip_terminal_default_background_cells() {
+    fn row_background_spans_skip_default_background_that_matches_surface() {
         let mut default_bg_cell = test_cell(0, 0, 'a');
         let mut ansi_bg_cell = test_cell(1, 0, 'b');
         default_bg_cell.uses_terminal_default_bg = true;
         default_bg_cell.bg = test_color(0.2, 0.2, 0.2);
         ansi_bg_cell.bg = test_color(0.2, 0.2, 0.2);
 
-        let grid = test_grid(vec![default_bg_cell, ansi_bg_cell], None);
+        let mut grid = test_grid(vec![default_bg_cell, ansi_bg_cell], None);
+        grid.terminal_surface_bg = test_color(0.2, 0.2, 0.2);
         let spans = grid.build_row_background_spans(grid.cells[0].as_slice());
 
         assert_eq!(spans.len(), 1);
         assert_eq!(spans[0].start_col, 1);
         assert_eq!(spans[0].end_col_exclusive, 2);
+        assert_eq!(spans[0].color, test_color(0.2, 0.2, 0.2));
+    }
+
+    #[test]
+    fn row_background_spans_include_transformed_default_background_cells() {
+        let mut default_bg_cell = test_cell(0, 0, 'a');
+        default_bg_cell.uses_terminal_default_bg = true;
+        default_bg_cell.bg = test_color(0.2, 0.2, 0.2);
+
+        let mut grid = test_grid(vec![default_bg_cell], None);
+        grid.terminal_surface_bg = test_color(0.1, 0.1, 0.1);
+        let spans = grid.build_row_background_spans(grid.cells[0].as_slice());
+
+        assert_eq!(spans.len(), 1);
+        assert_eq!(spans[0].start_col, 0);
+        assert_eq!(spans[0].end_col_exclusive, 1);
         assert_eq!(spans[0].color, test_color(0.2, 0.2, 0.2));
     }
 

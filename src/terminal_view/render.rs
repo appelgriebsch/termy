@@ -195,22 +195,6 @@ fn resolved_default_cell_colors(context: PaneCellBuildContext<'_>) -> (gpui::Rgb
     )
 }
 
-fn pane_wrapper_backdrop_fill(
-    backdrop_transform: Option<CellColorTransform>,
-    context: PaneCellBuildContext<'_>,
-) -> Option<gpui::Rgba> {
-    let backdrop_transform = backdrop_transform?;
-    let (_, pane_default_bg) = resolved_default_cell_colors(PaneCellBuildContext {
-        cell_color_transform: backdrop_transform,
-        ..context
-    });
-    // Pane focus should only dim rendered content and border chrome. A full-pane
-    // default-background fill flashes during focus transitions because it updates
-    // before the grid's cached cell content catches up. The command palette is
-    // the only caller that still needs a wrapper backdrop to dim empty space.
-    (pane_default_bg != context.terminal_surface_bg).then_some(pane_default_bg)
-}
-
 fn resolve_cell_colors(
     cell_content: &alacritty_terminal::term::cell::Cell,
     context: PaneCellBuildContext<'_>,
@@ -385,6 +369,21 @@ fn effective_pane_focus_active_border_alpha(
         return 0.0;
     }
     active_border_alpha
+}
+
+fn pane_focus_factors(
+    is_active_pane: bool,
+    pane_focus_enabled: bool,
+) -> (f32, f32) {
+    if !pane_focus_enabled {
+        return (0.0, 0.0);
+    }
+
+    if is_active_pane {
+        (0.0, 1.0)
+    } else {
+        (1.0, 0.0)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -833,6 +832,7 @@ impl TerminalView {
         font_size: Pixels,
         cursor_style: TerminalCursorStyle,
         cursor_cell: Option<(usize, usize)>,
+        terminal_surface_bg: gpui::Rgba,
     ) -> TerminalGrid {
         let mut selection_bg = colors.cursor;
         selection_bg.a = SELECTION_BG_ALPHA;
@@ -848,6 +848,7 @@ impl TerminalView {
             // background. Clearing the grid to that same translucent color would
             // composite it twice and darken the viewport rectangle.
             clear_bg: gpui::Hsla::transparent_black(),
+            terminal_surface_bg: terminal_surface_bg.into(),
             cursor_color: colors.cursor.into(),
             selection_bg: selection_bg.into(),
             selection_fg: selection_fg.into(),
@@ -1990,24 +1991,9 @@ impl Render for TerminalView {
         terminal_surface_bg.a = self.scaled_background_alpha(terminal_surface_bg.a);
 
         self.sync_terminal_size(window, cell_size);
+        let active_pane_id = self.active_pane_id().map(ToOwned::to_owned);
         let now = Instant::now();
         self.track_window_resize_indicator(window.viewport_size(), now);
-
-        let active_pane_id = self.active_pane_id().map(ToOwned::to_owned);
-        let active_tab_focus_snapshot = self
-            .tabs
-            .get(self.active_tab)
-            .map(|tab| (tab.id, tab.panes.len()));
-        self.update_pane_focus_target(
-            active_tab_focus_snapshot.map(|(id, _)| id),
-            active_tab_focus_snapshot
-                .map(|(_, pane_count)| pane_count)
-                .unwrap_or(0),
-            active_pane_id.as_deref(),
-            now,
-        );
-        let pane_focus_transition =
-            self.pane_focus_transition_snapshot(active_tab_focus_snapshot.map(|(id, _)| id), now);
         let pane_focus_config = self.pane_focus_config();
         let command_palette_open = self.is_command_palette_open();
         let palette_backdrop_transform =
@@ -2027,7 +2013,6 @@ impl Render for TerminalView {
         let mut pane_dividers = Vec::<AnyElement>::new();
         let mut pane_resize_handles = Vec::<AnyElement>::new();
         let mut pane_focus_accents = Vec::<AnyElement>::new();
-        let mut pane_focus_needs_animation = false;
         #[cfg(debug_assertions)]
         let mut render_pass_cache_counts = RenderPassCacheStrategyCounts::default();
 
@@ -2035,7 +2020,6 @@ impl Render for TerminalView {
             let multi_pane = active_tab.panes.len() > 1;
             let pane_focus_enabled =
                 multi_pane && pane_focus_config.is_some() && !command_palette_open;
-            pane_focus_needs_animation = pane_focus_enabled && pane_focus_transition.is_some();
             let max_right_cells = active_tab
                 .panes
                 .iter()
@@ -2058,25 +2042,8 @@ impl Render for TerminalView {
                     continue;
                 }
                 let is_active_pane = active_pane_id.as_deref() == Some(pane.id.as_str());
-                let (pane_inactive_focus, pane_active_focus) = if pane_focus_enabled {
-                    if let Some((from_pane_id, to_pane_id, progress)) =
-                        pane_focus_transition.as_ref()
-                    {
-                        if pane.id == *from_pane_id {
-                            (*progress, 1.0 - *progress)
-                        } else if pane.id == *to_pane_id {
-                            (1.0 - *progress, *progress)
-                        } else {
-                            (1.0, 0.0)
-                        }
-                    } else if is_active_pane {
-                        (0.0, 1.0)
-                    } else {
-                        (1.0, 0.0)
-                    }
-                } else {
-                    (0.0, 0.0)
-                };
+                let (pane_inactive_focus, pane_active_focus) =
+                    pane_focus_factors(is_active_pane, pane_focus_enabled);
                 let (pane_focus_transform, raw_pane_active_border_alpha) =
                     if let Some((preset, strength)) = pane_focus_config {
                         let inactive_scale = strength * pane_inactive_focus;
@@ -2127,10 +2094,6 @@ impl Render for TerminalView {
                     selection_range: pane_cache_key.selection_range,
                     pane_search_results,
                 };
-                let pane_wrapper_bg = pane_wrapper_backdrop_fill(
-                    palette_backdrop_transform,
-                    pane_build_context,
-                );
                 #[cfg_attr(not(debug_assertions), allow(unused_variables))]
                 let (pane_cells, cache_strategy, paint_damage, paint_cache) = {
                     let mut pane_render_cache = pane.render_cache.borrow_mut();
@@ -2192,6 +2155,7 @@ impl Render for TerminalView {
                     font_size,
                     pane_cursor_style,
                     cursor_cell,
+                    terminal_surface_bg,
                 );
 
                 let cell_width: f32 = cell_size.width.into();
@@ -2312,9 +2276,6 @@ impl Render for TerminalView {
                         .top(px(pane_top))
                         .w(px(pane_width))
                         .h(px(pane_height))
-                        .when_some(pane_wrapper_bg, |pane_layer, pane_default_bg| {
-                            pane_layer.bg(Into::<gpui::Hsla>::into(pane_default_bg))
-                        })
                         .child(terminal_grid)
                         .into_any_element(),
                 );
@@ -2365,9 +2326,6 @@ impl Render for TerminalView {
             }
         }
 
-        if pane_focus_needs_animation {
-            self.schedule_pane_focus_animation(cx);
-        }
         if self
             .tab_strip
             .switch_hints
@@ -3047,6 +3005,14 @@ mod tests {
     }
 
     #[test]
+    fn pane_focus_factors_use_immediate_active_and_inactive_states() {
+        assert_eq!(pane_focus_factors(true, true), (0.0, 1.0));
+        assert_eq!(pane_focus_factors(false, true), (1.0, 0.0));
+        assert_eq!(pane_focus_factors(true, false), (0.0, 0.0));
+        assert_eq!(pane_focus_factors(false, false), (0.0, 0.0));
+    }
+
+    #[test]
     fn terminal_scrollbar_track_width_clamps_to_overlay_frame() {
         assert_eq!(
             terminal_scrollbar_track_width(TERMINAL_SCROLLBAR_TRACK_WIDTH + 2.0),
@@ -3212,71 +3178,6 @@ mod tests {
 
         assert!(!inverse_explicit_background.uses_terminal_default_bg);
         assert!((inverse_explicit_background.bg.a - 0.2).abs() <= f32::EPSILON);
-    }
-
-    #[test]
-    fn pane_wrapper_backdrop_fill_skips_pane_focus_transforms() {
-        let shared_surface = gpui::Rgba {
-            r: 0.1,
-            g: 0.2,
-            b: 0.3,
-            a: 0.2,
-        };
-        let context = test_build_context_with_transform(
-            0.2,
-            CellColorTransform {
-                fg_blend: 0.0,
-                bg_blend: 0.5,
-                desaturate: 0.0,
-            },
-            shared_surface,
-            shared_surface,
-        );
-
-        assert_eq!(pane_wrapper_backdrop_fill(None, context), None);
-    }
-
-    #[test]
-    fn pane_wrapper_backdrop_fill_uses_command_palette_transform() {
-        let shared_surface = gpui::Rgba {
-            r: 0.1,
-            g: 0.2,
-            b: 0.3,
-            a: 0.2,
-        };
-        let transform = CellColorTransform {
-            fg_blend: 0.0,
-            bg_blend: 0.5,
-            desaturate: 0.0,
-        };
-        let context = test_build_context_with_transform(
-            0.2,
-            CellColorTransform::default(),
-            shared_surface,
-            shared_surface,
-        );
-        let (_, expected_bg) = resolved_default_cell_colors(PaneCellBuildContext {
-            cell_color_transform: transform,
-            ..context
-        });
-
-        assert_ne!(expected_bg, shared_surface);
-        assert_eq!(pane_wrapper_backdrop_fill(Some(transform), context), Some(expected_bg));
-    }
-
-    #[test]
-    fn pane_wrapper_backdrop_fill_skips_matching_surface_color() {
-        let base_context = test_build_context(0.2);
-        let (_, default_bg) = resolved_default_cell_colors(base_context);
-        let context = PaneCellBuildContext {
-            terminal_surface_bg: default_bg,
-            ..base_context
-        };
-
-        assert_eq!(
-            pane_wrapper_backdrop_fill(Some(CellColorTransform::default()), context),
-            None
-        );
     }
 
     #[test]
