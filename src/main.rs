@@ -388,7 +388,7 @@ fn main() {
     application.run(move |cx: &mut App| {
         // Set the dock icon for development builds (no .app bundle).
         #[cfg(debug_assertions)]
-        termy_native_sdk::set_dock_icon_from_png(include_bytes!("../assets/termy_icon.png"));
+        termy_native_sdk::set_dock_icon_from_png(include_bytes!("../assets/termy_icon@1024px.png"));
 
         spawn_deeplink_listener(cx, deeplink_rx);
 
