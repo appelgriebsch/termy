@@ -47,7 +47,6 @@ use termy_terminal_ui::{
 };
 use termy_toast::ToastManager;
 
-mod ai_input;
 mod command_palette;
 mod inline_input;
 mod interaction;
@@ -64,7 +63,7 @@ mod titles;
 mod update_toasts;
 
 use command_palette::{CommandPaletteMode, CommandPaletteState, TmuxSessionIntent};
-use inline_input::{InlineInputAlignment, InlineInputElement, InlineInputState};
+use inline_input::{InlineInputAlignment, InlineInputState};
 use overlay_view::TerminalOverlayView;
 use runtime::{RuntimeKind, RuntimeState, TmuxRuntime};
 pub(crate) use tab_strip::constants::*;
@@ -77,8 +76,6 @@ const ZOOM_STEP: f32 = 1.0;
 const TITLEBAR_HEIGHT: f32 = 32.0;
 #[cfg(not(target_os = "windows"))]
 const TITLEBAR_HEIGHT: f32 = 34.0;
-const AGENT_SIDEBAR_MIN_WIDTH: f32 = 180.0;
-const AGENT_SIDEBAR_MAX_WIDTH: f32 = 1000.0;
 const MAX_TAB_TITLE_CHARS: usize = 96;
 const DEFAULT_TAB_TITLE: &str = "Terminal";
 const COMMAND_TITLE_DELAY_MS: u64 = 250;
@@ -151,6 +148,8 @@ const SEARCH_BUTTON_TEXT_ALPHA: f32 = 0.70;
 const SEARCH_BUTTON_HOVER_BG_ALPHA: f32 = 0.20;
 const SEARCH_INPUT_SELECTION_ALPHA: f32 = 0.30;
 const TAB_SWITCH_HINT_ANIMATION_FRAME_MS: u64 = 16;
+const NEW_TAB_ANIMATION_DURATION: Duration = Duration::from_millis(180);
+const NEW_TAB_ANIMATION_FRAME_MS: u64 = 16;
 const MAX_PANE_FOCUS_STRENGTH: f32 = 2.0;
 const NATIVE_PANE_MIN_COLS: u16 = 24;
 const NATIVE_PANE_MIN_ROWS: u16 = 8;
@@ -209,9 +208,6 @@ struct PaneResizeDragState {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct AgentSidebarResizeDragState;
-
-#[derive(Clone, Copy, Debug)]
 struct VerticalTabStripResizeDragState;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -242,7 +238,6 @@ struct TerminalContextMenuState {
     buffer_position: Option<SelectionPos>,
     can_copy: bool,
     can_paste: bool,
-    can_ask_ai: bool,
     can_search_google: bool,
 }
 
@@ -1082,6 +1077,10 @@ pub struct TerminalView {
     vertical_tabs: bool,
     vertical_tabs_width: f32,
     vertical_tabs_minimized: bool,
+    auto_hide_tabbar: bool,
+    new_tab_animation_tab_id: Option<TabId>,
+    new_tab_animation_start: Option<Instant>,
+    new_tab_animation_scheduled: bool,
     show_termy_in_titlebar: bool,
     tab_shell_integration: TabTitleShellIntegration,
     configured_working_dir: Option<String>,
@@ -1093,11 +1092,6 @@ pub struct TerminalView {
     native_tab_persistence: bool,
     native_layout_autosave: bool,
     native_buffer_persistence: bool,
-    agent_sidebar_enabled: bool,
-    agent_sidebar_width: f32,
-    agent_sidebar_open: bool,
-    agent_sidebar_input_active: bool,
-    agent_sidebar_input: InlineInputState,
     current_named_layout: Option<String>,
     native_persist_revision: Arc<AtomicU64>,
     tmux_show_active_pane_border: bool,
@@ -1161,7 +1155,6 @@ pub struct TerminalView {
     terminal_scrollbar_track_hold_local_y: Option<f32>,
     terminal_scrollbar_track_hold_active: bool,
     pane_resize_drag: Option<PaneResizeDragState>,
-    agent_sidebar_resize_drag: Option<AgentSidebarResizeDragState>,
     vertical_tab_strip_resize_drag: Option<VerticalTabStripResizeDragState>,
     terminal_scrollbar_marker_cache: TerminalScrollbarMarkerCache,
     /// Cached cell dimensions
@@ -1171,9 +1164,6 @@ pub struct TerminalView {
     search_input: InlineInputState,
     search_state: SearchState,
     search_debounce_token: u64,
-    // AI input state
-    ai_input_open: bool,
-    ai_input: InlineInputState,
     // IME composing state for terminal mode
     ime_marked_text: Option<String>,
     ime_selected_range: Option<Range<usize>>,
@@ -1592,7 +1582,7 @@ impl TerminalView {
     }
 
     fn tab_switch_hints_blocked(&self) -> bool {
-        self.is_command_palette_open() || self.search_open || self.ai_input_open
+        self.is_command_palette_open() || self.search_open
     }
 
     pub(crate) fn tab_switch_hint_progress(&self, now: Instant) -> f32 {
@@ -1620,6 +1610,57 @@ impl TerminalView {
             });
         })
         .detach();
+    }
+
+    pub(crate) fn start_new_tab_animation(&mut self, tab_id: TabId, cx: &mut Context<Self>) {
+        self.new_tab_animation_tab_id = Some(tab_id);
+        self.new_tab_animation_start = Some(Instant::now());
+        self.new_tab_animation_scheduled = false;
+        self.schedule_new_tab_animation(cx);
+    }
+
+    fn schedule_new_tab_animation(&mut self, cx: &mut Context<Self>) {
+        if self.new_tab_animation_scheduled {
+            return;
+        }
+        self.new_tab_animation_scheduled = true;
+        cx.spawn(async move |this: WeakEntity<Self>, cx: &mut AsyncApp| {
+            smol::Timer::after(Duration::from_millis(NEW_TAB_ANIMATION_FRAME_MS)).await;
+            let _ = cx.update(|cx| {
+                this.update(cx, |view, cx| {
+                    view.new_tab_animation_scheduled = false;
+                    let still_animating = view
+                        .new_tab_animation_start
+                        .map(|start| {
+                            Instant::now().saturating_duration_since(start)
+                                < NEW_TAB_ANIMATION_DURATION
+                        })
+                        .unwrap_or(false);
+                    if still_animating {
+                        view.schedule_new_tab_animation(cx);
+                    } else {
+                        view.new_tab_animation_tab_id = None;
+                        view.new_tab_animation_start = None;
+                    }
+                    cx.notify();
+                })
+            });
+        })
+        .detach();
+    }
+
+    pub(crate) fn new_tab_animation_progress(&self, now: Instant) -> Option<(usize, f32)> {
+        let tab_id = self.new_tab_animation_tab_id?;
+        let start = self.new_tab_animation_start?;
+        let elapsed = now.saturating_duration_since(start).as_secs_f32();
+        let total = NEW_TAB_ANIMATION_DURATION.as_secs_f32();
+        if elapsed >= total {
+            return None;
+        }
+        let raw = (elapsed / total).clamp(0.0, 1.0);
+        let progress = 1.0 - (1.0 - raw).powi(3); // ease_out_cubic
+        let index = self.tabs.iter().position(|t| t.id == tab_id)?;
+        Some((index, progress))
     }
 
     fn pane_focus_config(&self) -> Option<(PaneFocusPreset, f32)> {
@@ -1815,10 +1856,6 @@ impl TerminalView {
         _window: &Window,
     ) -> Option<TerminalViewportGeometry> {
         self.terminal_viewport_geometry()
-    }
-
-    pub(super) fn agent_sidebar_visible(&self) -> bool {
-        self.agent_sidebar_enabled && self.agent_sidebar_open
     }
 
     pub(super) fn clear_terminal_scrollbar_marker_cache(&mut self) {
@@ -2147,6 +2184,10 @@ impl TerminalView {
                 .vertical_tabs_width
                 .clamp(VERTICAL_TAB_STRIP_MIN_WIDTH, VERTICAL_TAB_STRIP_MAX_WIDTH),
             vertical_tabs_minimized: config.vertical_tabs_minimized,
+            auto_hide_tabbar: config.auto_hide_tabbar,
+            new_tab_animation_tab_id: None,
+            new_tab_animation_start: None,
+            new_tab_animation_scheduled: false,
             show_termy_in_titlebar: config.show_termy_in_titlebar,
             tab_shell_integration,
             configured_working_dir,
@@ -2158,13 +2199,6 @@ impl TerminalView {
             native_tab_persistence: config.native_tab_persistence,
             native_layout_autosave: config.native_layout_autosave,
             native_buffer_persistence: config.native_buffer_persistence,
-            agent_sidebar_enabled: config.agent_sidebar_enabled,
-            agent_sidebar_width: config
-                .agent_sidebar_width
-                .clamp(AGENT_SIDEBAR_MIN_WIDTH, AGENT_SIDEBAR_MAX_WIDTH),
-            agent_sidebar_open: false,
-            agent_sidebar_input_active: false,
-            agent_sidebar_input: InlineInputState::new(String::new()),
             current_named_layout: None,
             native_persist_revision: Arc::new(AtomicU64::new(0)),
             tmux_show_active_pane_border: config.tmux_show_active_pane_border,
@@ -2231,7 +2265,6 @@ impl TerminalView {
             terminal_scrollbar_track_hold_local_y: None,
             terminal_scrollbar_track_hold_active: false,
             pane_resize_drag: None,
-            agent_sidebar_resize_drag: None,
             vertical_tab_strip_resize_drag: None,
             terminal_scrollbar_marker_cache: TerminalScrollbarMarkerCache::default(),
             cell_size: None,
@@ -2239,8 +2272,6 @@ impl TerminalView {
             search_input: InlineInputState::new(String::new()),
             search_state: SearchState::new(),
             search_debounce_token: 0,
-            ai_input_open: false,
-            ai_input: InlineInputState::new(String::new()),
             ime_marked_text: None,
             ime_selected_range: None,
             pending_clipboard: None,
@@ -2368,7 +2399,6 @@ impl TerminalView {
             let binary = config.tmux_binary.trim().to_string();
             (!binary.is_empty()).then_some(binary)
         };
-        let previous_theme_id = self.theme_id.clone();
         let previous_font_family = self.font_family.clone();
         let previous_font_size = self.font_size;
         self.theme_id = config.theme.clone();
@@ -2395,16 +2425,12 @@ impl TerminalView {
         let show_termy_in_titlebar_changed =
             self.show_termy_in_titlebar != config.show_termy_in_titlebar;
         let show_debug_overlay_changed = self.show_debug_overlay != config.show_debug_overlay;
-        if self.theme_id != previous_theme_id {
-            crate::plugins::emit_plugin_event(termy_plugin_core::HostEvent::ThemeChanged {
-                theme_id: self.theme_id.clone(),
-            });
-        }
         self.tab_close_visibility = config.tab_close_visibility;
         self.tab_width_mode = config.tab_width_mode;
         self.vertical_tabs = config.vertical_tabs;
         self.vertical_tabs_width = vertical_tabs_width;
         self.vertical_tabs_minimized = config.vertical_tabs_minimized;
+        self.auto_hide_tabbar = config.auto_hide_tabbar;
         self.show_termy_in_titlebar = config.show_termy_in_titlebar;
         self.show_debug_overlay = config.show_debug_overlay;
         self.tab_shell_integration = TabTitleShellIntegration {
@@ -2433,21 +2459,9 @@ impl TerminalView {
             self.native_layout_autosave != config.native_layout_autosave;
         let native_buffer_persistence_changed =
             self.native_buffer_persistence != config.native_buffer_persistence;
-        let agent_sidebar_enabled_changed =
-            self.agent_sidebar_enabled != config.agent_sidebar_enabled;
-        let clamped_agent_sidebar_width = config
-            .agent_sidebar_width
-            .clamp(AGENT_SIDEBAR_MIN_WIDTH, AGENT_SIDEBAR_MAX_WIDTH);
-        let agent_sidebar_width_changed =
-            (self.agent_sidebar_width - clamped_agent_sidebar_width).abs() > f32::EPSILON;
         self.native_tab_persistence = config.native_tab_persistence;
         self.native_layout_autosave = config.native_layout_autosave;
         self.native_buffer_persistence = config.native_buffer_persistence;
-        self.agent_sidebar_enabled = config.agent_sidebar_enabled;
-        self.agent_sidebar_width = clamped_agent_sidebar_width;
-        if !self.agent_sidebar_enabled {
-            self.agent_sidebar_open = false;
-        }
         self.tmux_show_active_pane_border = config.tmux_show_active_pane_border;
         self.configured_working_dir = config.working_dir.clone();
         self.terminal_runtime = Self::runtime_config_from_app_config(&config);
@@ -2474,11 +2488,6 @@ impl TerminalView {
             {
                 self.sync_persisted_native_workspace();
             }
-        }
-        if agent_sidebar_enabled_changed || agent_sidebar_width_changed {
-            self.clear_pane_render_caches();
-            self.clear_terminal_scrollbar_marker_cache();
-            self.cell_size = None;
         }
         if vertical_tabs_changed || vertical_tabs_width_changed || vertical_tabs_minimized_changed {
             self.clear_pane_render_caches();
@@ -2576,17 +2585,6 @@ impl TerminalView {
         }
 
         true
-    }
-
-    fn emit_active_tab_changed_plugin_event(&self) {
-        let Some(tab) = self.tabs.get(self.active_tab) else {
-            return;
-        };
-
-        crate::plugins::emit_plugin_event(termy_plugin_core::HostEvent::ActiveTabChanged {
-            tab_index: self.active_tab,
-            tab_title: tab.title.clone(),
-        });
     }
 
     #[cfg(not(test))]
