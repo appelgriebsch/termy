@@ -120,7 +120,6 @@ export function getDocsByCategory(): Record<string, Doc[]> {
 const CATEGORY_ORDER: Record<string, number> = {
   "Getting Started": 0,
   Guides: 1,
-  Plugins: 2,
   "Help & Troubleshooting": 3,
   Architecture: 4,
   General: 99,

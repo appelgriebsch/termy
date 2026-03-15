@@ -9,7 +9,6 @@ import { getDocsByCategory, sortDocCategories } from "@/lib/docs";
 const START_HERE_DOCS = [
   { slug: "installation", label: "Install Termy" },
   { slug: "first-steps", label: "First Steps" },
-  { slug: "plugins/overview", label: "Plugin System" },
   { slug: "troubleshooting", label: "Troubleshooting" },
 ] as const;
 
