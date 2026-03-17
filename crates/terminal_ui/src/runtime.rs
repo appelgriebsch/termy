@@ -771,49 +771,17 @@ impl Terminal {
         self.size
     }
 
-    /// Process pending events and return terminal events emitted by the child runtime.
-    pub fn process_events(&self, host: &mut impl TerminalReplyHost) -> Vec<TerminalEvent> {
-        let mut events = Vec::new();
-        let fallback_live_colors = alacritty_terminal::term::color::Colors::default();
-        while let Ok(event) = self.events_rx.try_recv() {
-            let response = match &event {
-                AlacEvent::ColorRequest(_, _) => {
-                    let term = self.term.lock();
-                    reply_bytes_for_event(
-                        &event,
-                        self.size,
-                        term.colors(),
-                        self.query_colors,
-                        host,
-                    )
-                }
-                _ => reply_bytes_for_event(
-                    &event,
-                    self.size,
-                    &fallback_live_colors,
-                    self.query_colors,
-                    host,
-                ),
-            };
-            if let Some(response) = response {
-                self.write(&response);
-            }
-            match event {
-                AlacEvent::Wakeup => {
-                    self.wakeup_queued.store(false, Ordering::Release);
-                    events.push(TerminalEvent::Wakeup);
-                }
-                AlacEvent::Title(title) => events.push(TerminalEvent::Title(title)),
-                AlacEvent::ResetTitle => events.push(TerminalEvent::ResetTitle),
-                AlacEvent::Bell => events.push(TerminalEvent::Bell),
-                AlacEvent::Exit => events.push(TerminalEvent::Exit),
-                AlacEvent::ClipboardStore(_, text) => {
-                    events.push(TerminalEvent::ClipboardStore(text));
-                }
-                _ => {}
-            }
-        }
-        events
+    /// Drain pending Alacritty events, writing reply bytes back to the PTY when required.
+    pub fn drain_events(&self, host: &mut impl TerminalReplyHost) -> Vec<TerminalEvent> {
+        drain_runtime_events(
+            &self.events_rx,
+            self.size,
+            &self.term,
+            self.query_colors,
+            &self.wakeup_queued,
+            host,
+            |response| self.write(response),
+        )
     }
 
     pub fn set_query_colors(&mut self, query_colors: TerminalQueryColors) {
@@ -908,6 +876,57 @@ impl Terminal {
     pub fn alternate_screen_mode(&self) -> bool {
         let term = self.term.lock();
         term.mode().contains(TermMode::ALT_SCREEN)
+    }
+}
+
+fn drain_runtime_events<T: EventListener>(
+    events_rx: &Receiver<AlacEvent>,
+    size: TerminalSize,
+    term: &FairMutex<Term<T>>,
+    query_colors: TerminalQueryColors,
+    wakeup_queued: &AtomicBool,
+    host: &mut impl TerminalReplyHost,
+    mut write_reply: impl FnMut(&[u8]),
+) -> Vec<TerminalEvent> {
+    let fallback_live_colors = alacritty_terminal::term::color::Colors::default();
+    let mut events = Vec::new();
+
+    while let Ok(event) = events_rx.try_recv() {
+        let response = match &event {
+            AlacEvent::ColorRequest(_, _) => {
+                let term = term.lock();
+                reply_bytes_for_event(&event, size, term.colors(), query_colors, host)
+            }
+            _ => reply_bytes_for_event(&event, size, &fallback_live_colors, query_colors, host),
+        };
+
+        if let Some(response) = response {
+            write_reply(&response);
+        }
+
+        if let Some(event) = terminal_event_from_alacritty(event, wakeup_queued) {
+            events.push(event);
+        }
+    }
+
+    events
+}
+
+fn terminal_event_from_alacritty(
+    event: AlacEvent,
+    wakeup_queued: &AtomicBool,
+) -> Option<TerminalEvent> {
+    match event {
+        AlacEvent::Wakeup => {
+            wakeup_queued.store(false, Ordering::Release);
+            Some(TerminalEvent::Wakeup)
+        }
+        AlacEvent::Title(title) => Some(TerminalEvent::Title(title)),
+        AlacEvent::ResetTitle => Some(TerminalEvent::ResetTitle),
+        AlacEvent::Bell => Some(TerminalEvent::Bell),
+        AlacEvent::Exit => Some(TerminalEvent::Exit),
+        AlacEvent::ClipboardStore(_, text) => Some(TerminalEvent::ClipboardStore(text)),
+        _ => None,
     }
 }
 
@@ -1077,18 +1096,26 @@ mod tests {
     #[cfg(target_os = "windows")]
     use super::quote_shell_program_if_needed;
     use super::{
-        DEFAULT_TERM, TerminalCursorState, TerminalDamageSnapshot, TerminalRuntimeConfig,
-        TerminalSize, cursor_position_from_term, cursor_state_from_term, keystroke_to_input,
-        pty_env_overrides, resolve_shell_path, take_term_damage_snapshot, termmode_to_terminal_mouse_mode,
+        DEFAULT_TERM, TerminalCursorState, TerminalDamageSnapshot, TerminalEvent,
+        TerminalRuntimeConfig, TerminalSize, cursor_position_from_term, cursor_state_from_term,
+        drain_runtime_events, keystroke_to_input, pty_env_overrides, resolve_shell_path,
+        take_term_damage_snapshot, termmode_to_terminal_mouse_mode,
     };
+    use crate::protocol::{TerminalClipboardTarget, TerminalQueryColors, TerminalReplyHost};
     use crate::grid::TerminalCursorStyle;
     use alacritty_terminal::{
         event::VoidListener,
         grid::{Dimensions, Scroll},
-        term::{Config as TermConfig, LineDamageBounds, Term},
-        vte::ansi::{self, CursorShape},
+        sync::FairMutex,
+        term::{ClipboardType, Config as TermConfig, LineDamageBounds, Term},
+        vte::ansi::{self, CursorShape, NamedColor},
     };
+    use flume::unbounded;
     use gpui::{Keystroke, Modifiers, px};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    };
 
     fn test_terminal_size() -> TerminalSize {
         TerminalSize {
@@ -1106,6 +1133,14 @@ mod tests {
         parser.advance(&mut term, input);
         let point = term.grid().cursor.point;
         (point.column.0, point.line.0)
+    }
+
+    fn term_after_bytes(input: &[u8]) -> Term<VoidListener> {
+        let size = test_terminal_size();
+        let mut term: Term<VoidListener> = Term::new(TermConfig::default(), &size, VoidListener);
+        let mut parser: ansi::Processor = ansi::Processor::new();
+        parser.advance(&mut term, input);
+        term
     }
 
     fn cursor_state_after_bytes(
@@ -1147,6 +1182,19 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
+    struct RecordingReplyHost {
+        clipboard_text: Option<String>,
+        requested_targets: Vec<TerminalClipboardTarget>,
+    }
+
+    impl TerminalReplyHost for RecordingReplyHost {
+        fn load_clipboard(&mut self, target: TerminalClipboardTarget) -> Option<String> {
+            self.requested_targets.push(target);
+            self.clipboard_text.clone()
+        }
+    }
+
     #[test]
     fn terminal_size_dimensions_saturate_bottommost_line_for_zero_rows() {
         let size = TerminalSize {
@@ -1158,6 +1206,89 @@ mod tests {
 
         assert_eq!(size.last_column().0, 0);
         assert_eq!(size.bottommost_line().0, 0);
+    }
+
+    #[test]
+    fn drain_runtime_events_replays_replies_and_collects_runtime_events() {
+        let (events_tx, events_rx) = unbounded();
+        events_tx
+            .send(alacritty_terminal::event::Event::PtyWrite("\x1b[?6c".to_string()))
+            .unwrap();
+        events_tx
+            .send(alacritty_terminal::event::Event::TextAreaSizeRequest(Arc::new(
+                |window_size| format!("size:{}x{}", window_size.num_cols, window_size.num_lines),
+            )))
+            .unwrap();
+        events_tx
+            .send(alacritty_terminal::event::Event::ClipboardLoad(
+                ClipboardType::Selection,
+                Arc::new(|text| format!("clip:{text}")),
+            ))
+            .unwrap();
+        events_tx
+            .send(alacritty_terminal::event::Event::ColorRequest(
+                NamedColor::Foreground as usize,
+                Arc::new(|color| format!("fg:{:02x}{:02x}{:02x}", color.r, color.g, color.b)),
+            ))
+            .unwrap();
+        events_tx
+            .send(alacritty_terminal::event::Event::Wakeup)
+            .unwrap();
+        events_tx
+            .send(alacritty_terminal::event::Event::Title("shell title".to_string()))
+            .unwrap();
+        events_tx
+            .send(alacritty_terminal::event::Event::ClipboardStore(
+                ClipboardType::Clipboard,
+                "stored text".to_string(),
+            ))
+            .unwrap();
+        events_tx.send(alacritty_terminal::event::Event::Exit).unwrap();
+        drop(events_tx);
+
+        let term = FairMutex::new(term_after_bytes(b"\x1b]10;#123456\x07"));
+        let wakeup_queued = AtomicBool::new(true);
+        let mut reply_host = RecordingReplyHost {
+            clipboard_text: Some("payload".to_string()),
+            requested_targets: Vec::new(),
+        };
+        let mut replies = Vec::new();
+
+        let events = drain_runtime_events(
+            &events_rx,
+            test_terminal_size(),
+            &term,
+            TerminalQueryColors::default(),
+            &wakeup_queued,
+            &mut reply_host,
+            |response| replies.push(String::from_utf8(response.to_vec()).unwrap()),
+        );
+
+        assert_eq!(
+            replies,
+            vec![
+                "\x1b[?6c".to_string(),
+                "size:32x4".to_string(),
+                "clip:payload".to_string(),
+                "fg:123456".to_string(),
+            ]
+        );
+        assert_eq!(
+            reply_host.requested_targets,
+            vec![TerminalClipboardTarget::Selection]
+        );
+        assert!(!wakeup_queued.load(Ordering::Acquire));
+        assert!(
+            matches!(
+                events.as_slice(),
+                [
+                    TerminalEvent::Wakeup,
+                    TerminalEvent::Title(title),
+                    TerminalEvent::ClipboardStore(text),
+                    TerminalEvent::Exit,
+                ] if title == "shell title" && text == "stored text"
+            )
+        );
     }
 
     #[test]
