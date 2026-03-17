@@ -1249,7 +1249,7 @@ impl TerminalView {
             ansi: colors.ansi.map(Self::ansi_rgb_from_rgba),
             foreground: Self::ansi_rgb_from_rgba(colors.foreground),
             background: Self::ansi_rgb_from_rgba(colors.background),
-            cursor: Self::ansi_rgb_from_rgba(colors.cursor),
+            cursor: None,
         }
     }
 

@@ -64,7 +64,7 @@ pub struct TerminalQueryColors {
     pub ansi: [AnsiRgb; 16],
     pub foreground: AnsiRgb,
     pub background: AnsiRgb,
-    pub cursor: AnsiRgb,
+    pub cursor: Option<AnsiRgb>,
 }
 
 impl Default for TerminalQueryColors {
@@ -162,11 +162,7 @@ impl Default for TerminalQueryColors {
                 g: 0x1e,
                 b: 0x1e,
             },
-            cursor: AnsiRgb {
-                r: 0xff,
-                g: 0xff,
-                b: 0xff,
-            },
+            cursor: None,
         }
     }
 }
@@ -198,23 +194,25 @@ impl TerminalQueryColors {
         }
     }
 
-    fn color(&self, index: usize) -> AnsiRgb {
+    fn color(&self, index: usize) -> Option<AnsiRgb> {
         match index {
-            0..=255 => self.indexed_color(index as u8),
-            value if value == NamedColor::Foreground as usize => self.foreground,
-            value if value == NamedColor::Background as usize => self.background,
+            0..=255 => Some(self.indexed_color(index as u8)),
+            value if value == NamedColor::Foreground as usize => Some(self.foreground),
+            value if value == NamedColor::Background as usize => Some(self.background),
+            // Upstream Alacritty only answers OSC 12 when the cursor color was explicitly
+            // overridden by the terminal state. The configured theme cursor color does not count.
             value if value == NamedColor::Cursor as usize => self.cursor,
-            value if value == NamedColor::BrightForeground as usize => self.foreground,
-            value if value == NamedColor::DimForeground as usize => self.foreground,
-            value if value == NamedColor::DimBlack as usize => self.ansi[0],
-            value if value == NamedColor::DimRed as usize => self.ansi[1],
-            value if value == NamedColor::DimGreen as usize => self.ansi[2],
-            value if value == NamedColor::DimYellow as usize => self.ansi[3],
-            value if value == NamedColor::DimBlue as usize => self.ansi[4],
-            value if value == NamedColor::DimMagenta as usize => self.ansi[5],
-            value if value == NamedColor::DimCyan as usize => self.ansi[6],
-            value if value == NamedColor::DimWhite as usize => self.ansi[7],
-            _ => self.foreground,
+            value if value == NamedColor::BrightForeground as usize => Some(self.foreground),
+            value if value == NamedColor::DimForeground as usize => Some(self.foreground),
+            value if value == NamedColor::DimBlack as usize => Some(self.ansi[0]),
+            value if value == NamedColor::DimRed as usize => Some(self.ansi[1]),
+            value if value == NamedColor::DimGreen as usize => Some(self.ansi[2]),
+            value if value == NamedColor::DimYellow as usize => Some(self.ansi[3]),
+            value if value == NamedColor::DimBlue as usize => Some(self.ansi[4]),
+            value if value == NamedColor::DimMagenta as usize => Some(self.ansi[5]),
+            value if value == NamedColor::DimCyan as usize => Some(self.ansi[6]),
+            value if value == NamedColor::DimWhite as usize => Some(self.ansi[7]),
+            _ => Some(self.foreground),
         }
     }
 }
@@ -1060,9 +1058,9 @@ fn terminal_query_response_bytes(
 ) -> Option<Vec<u8>> {
     match event {
         AlacEvent::PtyWrite(text) => Some(text.as_bytes().to_vec()),
-        AlacEvent::ColorRequest(index, formatter) => {
-            Some(formatter(query_colors.color(*index)).into_bytes())
-        }
+        AlacEvent::ColorRequest(index, formatter) => query_colors
+            .color(*index)
+            .map(|color| formatter(color).into_bytes()),
         AlacEvent::TextAreaSizeRequest(formatter) => Some(formatter(size.into()).into_bytes()),
         _ => None,
     }
@@ -1696,6 +1694,41 @@ mod tests {
         );
 
         assert_eq!(response, Some(b"\x1b]10;rgb:12/34/56\x1b\\".to_vec()));
+    }
+
+    #[test]
+    fn terminal_query_response_bytes_ignores_default_cursor_color_queries() {
+        let response = terminal_query_response_bytes(
+            &AlacEvent::ColorRequest(
+                NamedColor::Cursor as usize,
+                Arc::new(|color| format!("\x1b]12;rgb:{:02x}/{:02x}/{:02x}\x1b\\", color.r, color.g, color.b)),
+            ),
+            test_terminal_size(),
+            &TerminalQueryColors::default(),
+        );
+
+        assert_eq!(response, None);
+    }
+
+    #[test]
+    fn terminal_query_response_bytes_formats_explicit_cursor_color_queries() {
+        let mut query_colors = TerminalQueryColors::default();
+        query_colors.cursor = Some(AnsiRgb {
+            r: 0xab,
+            g: 0xcd,
+            b: 0xef,
+        });
+
+        let response = terminal_query_response_bytes(
+            &AlacEvent::ColorRequest(
+                NamedColor::Cursor as usize,
+                Arc::new(|color| format!("\x1b]12;rgb:{:02x}/{:02x}/{:02x}\x1b\\", color.r, color.g, color.b)),
+            ),
+            test_terminal_size(),
+            &query_colors,
+        );
+
+        assert_eq!(response, Some(b"\x1b]12;rgb:ab/cd/ef\x1b\\".to_vec()));
     }
 
     #[test]
