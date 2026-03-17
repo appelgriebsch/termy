@@ -2733,6 +2733,13 @@ impl Render for TerminalView {
             )
             .child(overlay_view);
 
+        #[cfg(target_os = "macos")]
+        let root = if self.native_file_drop_enabled {
+            root
+        } else {
+            root.on_drop(cx.listener(Self::handle_file_drop))
+        };
+
         #[cfg(not(target_os = "macos"))]
         let root = root.on_drop(cx.listener(Self::handle_file_drop));
 

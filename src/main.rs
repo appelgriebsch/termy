@@ -126,6 +126,10 @@ fn open_main_window(cx: &mut App, startup_config: config::AppConfig) -> Result<(
                 let (native_drop_tx, native_drop_rx) = flume::unbounded();
                 match terminal_view::install_native_file_drop(window, native_drop_tx) {
                     Ok(()) => {
+                        view.update(cx, |view, cx| {
+                            view.set_native_file_drop_enabled(true);
+                            cx.notify();
+                        });
                         let native_drop_view = view.downgrade();
                         cx.spawn(async move |cx: &mut AsyncApp| {
                             while let Ok(result) = native_drop_rx.recv_async().await {
@@ -141,6 +145,10 @@ fn open_main_window(cx: &mut App, startup_config: config::AppConfig) -> Result<(
                     Err(error) => {
                         log::error!("Failed to install native macOS file drop bridge: {error}");
                         termy_toast::error(error.to_string());
+                        view.update(cx, |view, cx| {
+                            view.set_native_file_drop_enabled(false);
+                            cx.notify();
+                        });
                     }
                 }
             }

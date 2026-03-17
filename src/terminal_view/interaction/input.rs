@@ -102,6 +102,12 @@ fn clipboard_item_to_terminal_paste_input(
 }
 
 impl TerminalView {
+    fn write_dropped_paths(&mut self, input: &[u8], cx: &mut Context<Self>) {
+        let _ = self.close_terminal_context_menu(cx);
+        self.write_terminal_paste_input(input, cx);
+        cx.notify();
+    }
+
     fn maybe_suppress_tab_switch_hint_for_key_down(
         &mut self,
         key: &str,
@@ -361,21 +367,17 @@ impl TerminalView {
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
     pub(in super::super) fn handle_file_drop(
         &mut self,
         paths: &ExternalPaths,
         _window: &mut Window,
         cx: &mut Context<Self>,
     ) {
-        let _ = self.close_terminal_context_menu(cx);
         let paths_list = paths.paths();
         let Some(input) = dropped_paths_to_terminal_paste_input(paths_list) else {
             return;
         };
-
-        self.write_terminal_paste_input(&input, cx);
-        cx.notify();
+        self.write_dropped_paths(&input, cx);
     }
 
     #[cfg(target_os = "macos")]
@@ -384,14 +386,12 @@ impl TerminalView {
         result: super::NativeDropResult,
         cx: &mut Context<Self>,
     ) {
-        let _ = self.close_terminal_context_menu(cx);
         match result {
             Ok(paths) => {
                 let Some(input) = dropped_paths_to_terminal_paste_input(&paths) else {
                     return;
                 };
-                self.write_terminal_paste_input(&input, cx);
-                cx.notify();
+                self.write_dropped_paths(&input, cx);
             }
             Err(error) => {
                 termy_toast::error(error.to_string());

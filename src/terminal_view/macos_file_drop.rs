@@ -177,12 +177,12 @@ extern "C" fn dragging_exited(_this: &Object, _sel: Sel, _dragging_info: id) {}
 
 extern "C" fn perform_drag_operation(this: &Object, _sel: Sel, dragging_info: id) -> BOOL {
     let result = decode_dragged_paths(dragging_info);
-    let state = unsafe { state(this) };
-    if state.sender.send(result.clone()).is_err() {
+    let accepted = result.is_ok();
+    if unsafe { state(this) }.sender.send(result).is_err() {
         return NO;
     }
 
-    if result.is_ok() {
+    if accepted {
         YES
     } else {
         NO
@@ -257,6 +257,11 @@ fn resolve_file_url_path(file_url: id) -> Result<PathBuf, NativeDropError> {
     let url_string = nsstring_to_string(file_url)?;
     let ns_url: id = unsafe { msg_send![class!(NSURL), URLWithString: file_url] };
     if ns_url == nil {
+        return Err(NativeDropError::InvalidFileUrl(url_string));
+    }
+
+    let is_file_url: BOOL = unsafe { msg_send![ns_url, isFileURL] };
+    if is_file_url != YES {
         return Err(NativeDropError::InvalidFileUrl(url_string));
     }
 

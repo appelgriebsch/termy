@@ -11,15 +11,13 @@ use alacritty_terminal::term::cell::Flags;
 use flume::{Sender, bounded};
 use gpui::AppContext;
 use gpui::{
-    AnyElement, App, AsyncApp, ClipboardItem, Context, Element, Entity, FocusHandle, Focusable,
-    Font, FontWeight, InteractiveElement, IntoElement, KeyDownEvent,
+    AnyElement, App, AsyncApp, ClipboardItem, Context, Element, Entity, ExternalPaths,
+    FocusHandle, Focusable, Font, FontWeight, InteractiveElement, IntoElement, KeyDownEvent,
     ModifiersChangedEvent, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
     ParentElement, Pixels, Render, ScrollWheelEvent, SharedString, Size,
     StatefulInteractiveElement, Styled, TouchPhase, WeakEntity, Window, WindowBackgroundAppearance,
     div, point, px,
 };
-#[cfg(not(target_os = "macos"))]
-use gpui::ExternalPaths;
 use std::{
     cell::{Cell, RefCell},
     collections::{HashMap, HashSet},
@@ -1217,6 +1215,8 @@ pub struct TerminalView {
     last_notified_update_state: Option<UpdateState>,
     #[cfg(target_os = "macos")]
     update_check_toast_id: Option<u64>,
+    #[cfg(target_os = "macos")]
+    native_file_drop_enabled: bool,
 }
 
 impl TerminalView {
@@ -1238,6 +1238,11 @@ impl TerminalView {
 
     pub(super) fn install_cli_available(&self) -> bool {
         self.install_cli_available
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn set_native_file_drop_enabled(&mut self, enabled: bool) {
+        self.native_file_drop_enabled = enabled;
     }
 
     pub(super) fn refresh_install_cli_availability(&mut self) -> bool {
@@ -2346,6 +2351,8 @@ impl TerminalView {
             last_notified_update_state: None,
             #[cfg(target_os = "macos")]
             update_check_toast_id: None,
+            #[cfg(target_os = "macos")]
+            native_file_drop_enabled: false,
         };
         #[cfg(target_os = "windows")]
         if config.tmux_enabled {
