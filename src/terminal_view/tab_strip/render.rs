@@ -214,6 +214,35 @@ mod tests {
             None
         );
     }
+
+    #[test]
+    fn vertical_control_rail_layout_fits_within_collapsed_sidebar() {
+        let layout = TerminalView::vertical_control_rail_layout(
+            true,
+            VERTICAL_TAB_STRIP_COLLAPSED_WIDTH,
+            VERTICAL_TAB_STRIP_COLLAPSED_WIDTH - TAB_STROKE_THICKNESS,
+            18.0,
+        )
+        .expect("collapsed sidebar should fit utility controls");
+        let controls_width = (18.0 * 2.0) + layout.gap;
+        let rail_left = VERTICAL_TAB_STRIP_COLLAPSED_WIDTH - layout.right_inset - controls_width;
+        assert!(rail_left >= 0.0);
+        assert_eq!(layout.bottom_inset, VERTICAL_TAB_STRIP_PADDING);
+        assert!(layout.clearance_height >= 18.0 + VERTICAL_TAB_STRIP_PADDING);
+    }
+
+    #[test]
+    fn vertical_control_rail_layout_prefers_expanded_spacing_when_room_exists() {
+        let layout = TerminalView::vertical_control_rail_layout(
+            false,
+            220.0,
+            219.0,
+            TABBAR_NEW_TAB_BUTTON_SIZE,
+        )
+        .expect("expanded sidebar should fit utility controls");
+        assert_eq!(layout.gap, 6.0);
+        assert_eq!(layout.bottom_inset, VERTICAL_TAB_STRIP_PADDING);
+    }
 }
 
 struct TabStripRenderState {
@@ -234,6 +263,14 @@ struct VerticalTitlebarChromeLayout {
     block_width: f32,
     right_divider: chrome::StrokeRect,
     bottom_seam: chrome::StrokeRect,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct VerticalControlRailLayout {
+    right_inset: f32,
+    bottom_inset: f32,
+    gap: f32,
+    clearance_height: f32,
 }
 
 struct TabItemRenderInput {
@@ -523,6 +560,32 @@ impl TerminalView {
                 w: block_width.max(0.0),
                 h: TAB_STROKE_THICKNESS,
             },
+        })
+    }
+
+    fn vertical_control_rail_layout(
+        compact: bool,
+        strip_width: f32,
+        divider_x: f32,
+        button_size: f32,
+    ) -> Option<VerticalControlRailLayout> {
+        if strip_width <= f32::EPSILON || button_size <= f32::EPSILON {
+            return None;
+        }
+
+        let right_inset = (strip_width - divider_x).max(0.0) + VERTICAL_TAB_STRIP_PADDING;
+        let preferred_gap: f32 = if compact { 4.0 } else { 6.0 };
+        let controls_width = button_size * 2.0;
+        if strip_width < controls_width {
+            return None;
+        }
+
+        let gap = preferred_gap.min((strip_width - controls_width - right_inset).max(0.0));
+        Some(VerticalControlRailLayout {
+            right_inset,
+            bottom_inset: VERTICAL_TAB_STRIP_PADDING,
+            gap,
+            clearance_height: button_size + (VERTICAL_TAB_STRIP_PADDING * 2.0),
         })
     }
 
@@ -831,12 +894,13 @@ impl TerminalView {
     fn render_vertical_tail(
         layout: &chrome::VerticalTabChromeLayout,
         tab_stroke_color: gpui::Rgba,
+        min_height: f32,
     ) -> AnyElement {
         let mut tail = div()
             .id("vertical-tabs-lane-tail")
             .relative()
             .flex_1()
-            .min_h(px(0.0));
+            .min_h(px(min_height.max(0.0)));
 
         if layout.tail.draw_left_edge {
             tail = tail.child(
@@ -865,45 +929,21 @@ impl TerminalView {
         tail.into_any_element()
     }
 
-    fn render_vertical_utility_dock(
-        &self,
-        compact: bool,
-        dock_height: f32,
-        strip_width: f32,
-        divider_x: f32,
+    fn render_vertical_control_rail(
+        layout: VerticalControlRailLayout,
         collapse_button: AnyElement,
         new_tab_button: AnyElement,
-        palette: &TabStripPalette,
     ) -> AnyElement {
-        let dock_seam = chrome::StrokeRect {
-            x: TAB_STROKE_THICKNESS,
-            y: 0.0,
-            w: divider_x,
-            h: TAB_STROKE_THICKNESS,
-        };
-
-        let controls = div()
-            .id("vertical-tabs-utility-controls")
+        div()
+            .id("vertical-tabs-control-rail")
+            .absolute()
+            .right(px(layout.right_inset))
+            .bottom(px(layout.bottom_inset))
             .flex()
             .items_center()
-            .gap(px(if compact { 4.0 } else { 6.0 }))
+            .gap(px(layout.gap))
             .child(collapse_button)
-            .child(new_tab_button);
-
-        let mut dock = div()
-            .id("vertical-tabs-utility-dock")
-            .relative()
-            .flex_none()
-            .w(px(strip_width))
-            .h(px(dock_height))
-            .px(px(VERTICAL_TAB_STRIP_PADDING))
-            .flex()
-            .items_center();
-
-        dock = dock.justify_center();
-
-        dock.child(Self::render_tab_stroke(dock_seam, palette.tab_stroke_color))
-            .child(controls)
+            .child(new_tab_button)
             .into_any_element()
     }
 
@@ -1432,7 +1472,6 @@ impl TerminalView {
         let compact = self.vertical_tabs_minimized;
         let strip_width = self.effective_vertical_tab_strip_width();
         let header_height = self.vertical_tab_strip_header_height();
-        let utility_dock_height = self.vertical_tab_strip_utility_dock_height();
         let active_tab_index = (self.active_tab < self.tabs.len()).then_some(self.active_tab);
         let tab_heights: Vec<f32> = (0..self.tabs.len())
             .map(|index| {
@@ -1487,15 +1526,18 @@ impl TerminalView {
             if compact { 12.0 } else { 14.0 },
             cx,
         );
-        let utility_dock = self.render_vertical_utility_dock(
+        let control_rail_layout = Self::vertical_control_rail_layout(
             compact,
-            utility_dock_height,
             strip_width,
             chrome_layout.divider_x,
-            collapse_button,
-            new_tab_button,
-            &palette,
+            control_button_size,
         );
+        // Keep the controls fixed to the sidebar tail while reserving scrollable
+        // chrome below the last tab, so the column reads as one surface instead
+        // of splitting into a list plus a second footer bar.
+        let control_rail = control_rail_layout.map(|layout| {
+            Self::render_vertical_control_rail(layout, collapse_button, new_tab_button)
+        });
 
         let mut list = div()
             .id("vertical-tabs-list")
@@ -1623,6 +1665,7 @@ impl TerminalView {
             }))
             .child(
                 div()
+                    .relative()
                     .w_full()
                     .h_full()
                     .flex()
@@ -1646,10 +1689,12 @@ impl TerminalView {
                                     .child(Self::render_vertical_tail(
                                         &chrome_layout,
                                         palette.tab_stroke_color,
+                                        control_rail_layout
+                                            .map_or(0.0, |layout| layout.clearance_height),
                                     )),
                             ),
                     )
-                    .child(utility_dock),
+                    .children(control_rail),
             )
             .into_any_element()
     }
