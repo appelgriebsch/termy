@@ -34,6 +34,8 @@ pub(crate) struct VerticalBottomShelfLayout {
     pub(crate) shelf_height: f32,
     pub(crate) button_size: f32,
     pub(crate) icon_size: f32,
+    pub(crate) button_x: f32,
+    pub(crate) button_y: f32,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -215,14 +217,11 @@ impl VerticalTabStripLayoutSnapshot {
             return self.row_at_pointer(y - self.list_top, scroll_offset_y).is_some();
         }
 
-        let (button_x, button_y) = TerminalView::vertical_bottom_shelf_button_origin(
-            self.bottom_shelf_layout,
-        );
         Self::point_hits_rect(
             x,
             y,
-            button_x,
-            self.bottom_shelf_top + button_y,
+            self.bottom_shelf_layout.button_x,
+            self.bottom_shelf_top + self.bottom_shelf_layout.button_y,
             self.bottom_shelf_layout.button_size,
             self.bottom_shelf_layout.button_size,
         )
@@ -492,21 +491,20 @@ impl TerminalView {
         }
     }
 
-    pub(super) fn vertical_bottom_shelf_layout() -> VerticalBottomShelfLayout {
-        VerticalBottomShelfLayout {
-            shelf_height: VERTICAL_COMPACT_CONTROL_SHELF_HEIGHT,
-            button_size: VERTICAL_TITLEBAR_CONTROL_BUTTON_SIZE,
-            icon_size: VERTICAL_TITLEBAR_CONTROL_ICON_SIZE,
-        }
-    }
+    pub(super) fn vertical_bottom_shelf_layout(strip_width: f32) -> VerticalBottomShelfLayout {
+        let shelf_height = VERTICAL_COMPACT_CONTROL_SHELF_HEIGHT;
+        let button_size = VERTICAL_TITLEBAR_CONTROL_BUTTON_SIZE;
+        let divider_x = (strip_width - TAB_STROKE_THICKNESS).max(0.0);
+        let button_x = (divider_x - VERTICAL_TAB_STRIP_PADDING - button_size).max(0.0);
+        let button_y = ((shelf_height - button_size) * 0.5).max(0.0);
 
-    pub(super) fn vertical_bottom_shelf_button_origin(
-        layout: VerticalBottomShelfLayout,
-    ) -> (f32, f32) {
-        (
-            VERTICAL_TAB_STRIP_PADDING,
-            ((layout.shelf_height - layout.button_size) * 0.5).max(0.0),
-        )
+        VerticalBottomShelfLayout {
+            shelf_height,
+            button_size,
+            icon_size: VERTICAL_TITLEBAR_CONTROL_ICON_SIZE,
+            button_x,
+            button_y,
+        }
     }
 
     pub(crate) fn vertical_tab_strip_layout_for_input(
@@ -516,7 +514,7 @@ impl TerminalView {
         let clamped_list_height = input.list_height.max(0.0);
         let top_shelf_layout =
             Self::vertical_new_tab_shelf_layout(strip_width - TAB_STROKE_THICKNESS, input.compact);
-        let bottom_shelf_layout = Self::vertical_bottom_shelf_layout();
+        let bottom_shelf_layout = Self::vertical_bottom_shelf_layout(strip_width);
         let list_top = input.header_height + top_shelf_layout.shelf_height;
         let bottom_shelf_top = list_top + clamped_list_height;
         let divider_x = (strip_width - TAB_STROKE_THICKNESS).max(0.0);

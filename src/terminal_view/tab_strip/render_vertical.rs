@@ -113,11 +113,24 @@ mod tests {
     }
 
     #[test]
-    fn vertical_bottom_shelf_button_origin_anchors_to_left_inset() {
-        let layout = TerminalView::vertical_bottom_shelf_layout();
-        let origin = TerminalView::vertical_bottom_shelf_button_origin(layout);
-        assert_eq!(origin.0, VERTICAL_TAB_STRIP_PADDING);
-        assert_eq!(origin.1, (layout.shelf_height - layout.button_size) * 0.5);
+    fn vertical_bottom_shelf_button_origin_is_right_aligned() {
+        let strip_width = 220.0;
+        let layout = TerminalView::vertical_bottom_shelf_layout(strip_width);
+        let divider_x = strip_width - TAB_STROKE_THICKNESS;
+        assert_eq!(
+            layout.button_x + layout.button_size + VERTICAL_TAB_STRIP_PADDING,
+            divider_x
+        );
+        assert_eq!(layout.button_y, (layout.shelf_height - layout.button_size) * 0.5);
+    }
+
+    #[test]
+    fn compact_vertical_bottom_shelf_button_stays_inside_collapsed_strip() {
+        let strip_width =
+            collapsed_vertical_tab_strip_width(TerminalView::titlebar_left_padding_for_platform());
+        let layout = TerminalView::vertical_bottom_shelf_layout(strip_width);
+        assert!(layout.button_x >= 0.0);
+        assert!(layout.button_x + layout.button_size <= strip_width - TAB_STROKE_THICKNESS);
     }
 
     #[test]
@@ -498,7 +511,6 @@ impl TerminalView {
         compact: bool,
         cx: &mut Context<Self>,
     ) -> AnyElement {
-        let (button_x, button_y) = Self::vertical_bottom_shelf_button_origin(layout);
         div()
             .id("vertical-tabs-bottom-shelf")
             .flex_none()
@@ -535,8 +547,8 @@ impl TerminalView {
             .child(
                 div()
                     .absolute()
-                    .left(px(button_x))
-                    .top(px(button_y))
+                    .left(px(layout.button_x))
+                    .top(px(layout.button_y))
                     .child(self.render_tab_strip_control_button(
                         "vertical-bottom-shelf-toggle",
                         if compact { "›" } else { "‹" },

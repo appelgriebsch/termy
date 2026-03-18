@@ -330,9 +330,6 @@ mod tests {
         let top_button_y = layout.header_height
             + layout.top_shelf_layout.button_y
             + (layout.top_shelf_layout.button_height * 0.5);
-        let (bottom_button_x, bottom_button_y) =
-            TerminalView::vertical_bottom_shelf_button_origin(layout.bottom_shelf_layout);
-
         assert!(TerminalView::vertical_tab_strip_interactive_hit_test_for_layout(
             top_button_x,
             top_button_y,
@@ -340,9 +337,9 @@ mod tests {
             0.0,
         ));
         assert!(TerminalView::vertical_tab_strip_interactive_hit_test_for_layout(
-            bottom_button_x + (layout.bottom_shelf_layout.button_size * 0.5),
+            layout.bottom_shelf_layout.button_x + (layout.bottom_shelf_layout.button_size * 0.5),
             layout.bottom_shelf_top
-                + bottom_button_y
+                + layout.bottom_shelf_layout.button_y
                 + (layout.bottom_shelf_layout.button_size * 0.5),
             &layout,
             0.0,
