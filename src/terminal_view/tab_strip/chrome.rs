@@ -60,6 +60,7 @@ pub(super) struct VerticalTabChromeInput {
     pub(super) strip_width: f32,
     pub(super) control_rail_height: f32,
     pub(super) tab_item_gap: f32,
+    pub(super) external_top_seam: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -395,6 +396,11 @@ pub(super) fn compute_vertical_tab_chrome_layout(
     let content_height = spans
         .last()
         .map_or(0.0, |span| snap_px(span.bottom_exclusive));
+    let top_seam_offset_y = if input.external_top_seam {
+        TAB_STROKE_THICKNESS
+    } else {
+        0.0
+    };
 
     let active_span = input
         .active_index
@@ -444,7 +450,14 @@ pub(super) fn compute_vertical_tab_chrome_layout(
         }
     };
 
-    if control_seam.is_none() {
+    if input.external_top_seam {
+        if let Some(first_tab) = tab_strokes.first_mut() {
+            // The titlebar block owns the titlebar/sidebar seam, so the list
+            // starts one pixel lower to avoid double-drawing that corner.
+            first_tab.left.y = top_seam_offset_y;
+            first_tab.left.h = (first_tab.left.h - top_seam_offset_y).max(0.0);
+        }
+    } else if control_seam.is_none() {
         if let Some(first_span) = spans.first().copied() {
             let top_boundary_y = first_span.top;
             let top_boundary_rect = StrokeRect::new(
@@ -511,11 +524,11 @@ pub(super) fn compute_vertical_tab_chrome_layout(
     let mut content_divider_strokes = Vec::with_capacity(2);
     match active_span {
         Some(active_span) => {
-            let top_height = active_span.top.clamp(0.0, content_height);
+            let top_height = (active_span.top - top_seam_offset_y).clamp(0.0, content_height);
             if top_height > 0.0 {
                 content_divider_strokes.push(StrokeRect::new(
                     divider_x,
-                    0.0,
+                    top_seam_offset_y,
                     TAB_STROKE_THICKNESS,
                     top_height,
                 ));
@@ -534,12 +547,12 @@ pub(super) fn compute_vertical_tab_chrome_layout(
             }
         }
         None => {
-            if content_height > 0.0 {
+            if content_height > top_seam_offset_y {
                 content_divider_strokes.push(StrokeRect::new(
                     divider_x,
-                    0.0,
+                    top_seam_offset_y,
                     TAB_STROKE_THICKNESS,
-                    content_height,
+                    content_height - top_seam_offset_y,
                 ));
             }
         }
@@ -592,13 +605,24 @@ mod tests {
         active_index: Option<usize>,
         strip_width: f32,
     ) -> VerticalTabChromeLayout {
+        vertical_layout_for_with_input(heights, active_index, strip_width, TABBAR_HEIGHT, false)
+    }
+
+    fn vertical_layout_for_with_input(
+        heights: &[f32],
+        active_index: Option<usize>,
+        strip_width: f32,
+        control_rail_height: f32,
+        external_top_seam: bool,
+    ) -> VerticalTabChromeLayout {
         compute_vertical_tab_chrome_layout(
             heights.iter().copied(),
             VerticalTabChromeInput {
                 active_index,
                 strip_width,
-                control_rail_height: TABBAR_HEIGHT,
+                control_rail_height,
                 tab_item_gap: TAB_ITEM_GAP,
+                external_top_seam,
             },
         )
     }
@@ -1000,5 +1024,38 @@ mod tests {
                 .y,
             31.0
         );
+    }
+
+    #[test]
+    fn vertical_external_top_seam_suppresses_first_row_top_boundary() {
+        let layout = vertical_layout_for_with_input(&[32.0, 32.0], Some(1), 180.0, 0.0, true);
+
+        assert!(layout.control_seam.is_none());
+        assert!(layout.tab_strokes[0].top_boundary.is_none());
+        assert_eq!(layout.tab_strokes[0].left.y, 1.0);
+        assert_eq!(layout.tab_strokes[0].left.h, 31.0);
+    }
+
+    #[test]
+    fn vertical_external_top_seam_starts_content_divider_below_titlebar_seam() {
+        let layout = vertical_layout_for_with_input(&[32.0, 32.0], Some(1), 180.0, 0.0, true);
+
+        assert_eq!(
+            layout
+                .content_divider_strokes
+                .first()
+                .expect("inactive segment above active tab should keep divider")
+                .y,
+            1.0
+        );
+    }
+
+    #[test]
+    fn vertical_external_top_seam_has_no_pixel_overlap() {
+        let heights = [32.0, 32.0, 32.0];
+        let layout = vertical_layout_for_with_input(&heights, Some(1), 180.0, 0.0, true);
+        let coverage = vertical_coverage_map(&layout, &heights, 48.0);
+
+        assert!(coverage.values().all(|count| *count == 1));
     }
 }

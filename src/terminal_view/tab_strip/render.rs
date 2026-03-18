@@ -195,18 +195,24 @@ mod tests {
     }
 
     #[test]
-    fn termy_branding_handoff_divider_matches_horizontal_boundary_geometry() {
-        let divider = TerminalView::termy_branding_handoff_divider(128.0)
-            .expect("divider should render for positive width");
-        assert_eq!(divider.x, 127.0);
-        assert_eq!(divider.y, 3.0);
-        assert_eq!(divider.w, 1.0);
-        assert_eq!(divider.h, 31.0);
+    fn vertical_titlebar_sidebar_block_layout_uses_sidebar_width() {
+        let layout = TerminalView::vertical_titlebar_sidebar_block_layout(240.0, TABBAR_HEIGHT)
+            .expect("positive size should produce layout");
+        assert_eq!(layout.block_width, 240.0);
+        assert_eq!(layout.right_divider.x, 239.0);
+        assert_eq!(layout.bottom_seam.w, 240.0);
     }
 
     #[test]
-    fn termy_branding_handoff_divider_is_absent_without_lane_width() {
-        assert_eq!(TerminalView::termy_branding_handoff_divider(0.0), None);
+    fn vertical_titlebar_sidebar_block_layout_hides_without_positive_extent() {
+        assert_eq!(
+            TerminalView::vertical_titlebar_sidebar_block_layout(0.0, TABBAR_HEIGHT),
+            None
+        );
+        assert_eq!(
+            TerminalView::vertical_titlebar_sidebar_block_layout(64.0, 0.0),
+            None
+        );
     }
 }
 
@@ -221,6 +227,13 @@ struct TabStripRenderState {
 struct DividerCollisionState {
     left: bool,
     right: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct VerticalTitlebarChromeLayout {
+    block_width: f32,
+    right_divider: chrome::StrokeRect,
+    bottom_seam: chrome::StrokeRect,
 }
 
 struct TabItemRenderInput {
@@ -486,12 +499,30 @@ impl TerminalView {
         Self::tab_strip_chrome_visible(self.auto_hide_tabbar, self.tabs.len())
     }
 
-    fn termy_branding_handoff_divider(lane_width: f32) -> Option<chrome::StrokeRect> {
-        (lane_width > f32::EPSILON).then_some(chrome::StrokeRect {
-            x: (lane_width - TAB_STROKE_THICKNESS).max(0.0),
-            y: (TABBAR_HEIGHT - TAB_ITEM_HEIGHT + TAB_STROKE_THICKNESS).max(0.0),
-            w: TAB_STROKE_THICKNESS,
-            h: (TAB_ITEM_HEIGHT - TAB_STROKE_THICKNESS).max(0.0),
+    fn vertical_titlebar_sidebar_block_layout(
+        block_width: f32,
+        titlebar_height: f32,
+    ) -> Option<VerticalTitlebarChromeLayout> {
+        if block_width <= f32::EPSILON || titlebar_height <= f32::EPSILON {
+            return None;
+        }
+
+        let divider_top = (titlebar_height - TAB_ITEM_HEIGHT + TAB_STROKE_THICKNESS).max(0.0);
+        let divider_height = (titlebar_height - divider_top - TAB_STROKE_THICKNESS).max(0.0);
+        Some(VerticalTitlebarChromeLayout {
+            block_width,
+            right_divider: chrome::StrokeRect {
+                x: (block_width - TAB_STROKE_THICKNESS).max(0.0),
+                y: divider_top,
+                w: TAB_STROKE_THICKNESS,
+                h: divider_height,
+            },
+            bottom_seam: chrome::StrokeRect {
+                x: 0.0,
+                y: (titlebar_height - TAB_STROKE_THICKNESS).max(0.0),
+                w: block_width.max(0.0),
+                h: TAB_STROKE_THICKNESS,
+            },
         })
     }
 
@@ -647,12 +678,12 @@ impl TerminalView {
         colors: &TerminalColors,
         font_family: &SharedString,
         tabbar_bg: gpui::Rgba,
-        show_handoff_divider: bool,
+        show_sidebar_chrome: bool,
     ) -> Option<AnyElement> {
         let font_family_key = font_family.to_string();
         let reserved_width =
             self.termy_branding_reserved_width(window, font_family, font_family_key.as_str());
-        if reserved_width <= f32::EPSILON {
+        if !show_sidebar_chrome && reserved_width <= f32::EPSILON {
             return None;
         }
 
@@ -662,10 +693,37 @@ impl TerminalView {
         let palette = self.resolve_tab_strip_palette(colors, tabbar_bg);
         let mut branding_text_color = palette.inactive_tab_text;
         branding_text_color.a = branding_text_color.a.max(0.82);
+        let visible_block_width = self.effective_vertical_tab_strip_width();
 
-        // Vertical mode keeps the titlebar branding anchored in the same slot,
-        // but the sidebar chrome owns the titlebar/content seam. Reusing the
-        // horizontal inset lane here would double-draw a baseline.
+        if let Some(layout) = show_sidebar_chrome
+            .then(|| Self::vertical_titlebar_sidebar_block_layout(visible_block_width, TABBAR_HEIGHT))
+            .flatten()
+        {
+            return Some(
+                div()
+                    .id("vertical-titlebar-chrome-block")
+                    .relative()
+                    .flex_none()
+                    .w(px(layout.block_width))
+                    .h(px(TABBAR_HEIGHT))
+                    .children(Self::render_termy_branding(
+                        font_family,
+                        leading_inset_width,
+                        reserved_width,
+                        branding_text_color,
+                    ))
+                    .child(Self::render_tab_stroke(
+                        layout.right_divider,
+                        palette.tab_stroke_color,
+                    ))
+                    .child(Self::render_tab_stroke(
+                        layout.bottom_seam,
+                        palette.tab_stroke_color,
+                    ))
+                    .into_any_element(),
+            );
+        }
+
         Some(
             div()
                 .id("vertical-titlebar-branding-slot")
@@ -679,13 +737,6 @@ impl TerminalView {
                     reserved_width,
                     branding_text_color,
                 ))
-                .children(show_handoff_divider.then(|| {
-                    Self::render_tab_stroke(
-                        Self::termy_branding_handoff_divider(lane_width)
-                            .expect("positive branding lane width must yield divider"),
-                        palette.tab_stroke_color,
-                    )
-                }))
                 .into_any_element(),
         )
     }
@@ -1398,6 +1449,7 @@ impl TerminalView {
                 strip_width,
                 control_rail_height: self.vertical_tab_strip_header_height(),
                 tab_item_gap: TAB_ITEM_GAP,
+                external_top_seam: true,
             },
         );
         debug_assert_eq!(chrome_layout.tab_strokes.len(), self.tabs.len());
