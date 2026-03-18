@@ -4,5 +4,7 @@ pub(super) mod hints;
 pub(super) mod hit_test;
 pub(super) mod input;
 pub(super) mod layout;
-pub(super) mod render;
+pub(super) mod render_horizontal;
+pub(super) mod render_shared;
+pub(super) mod render_vertical;
 pub(super) mod state;

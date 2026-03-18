@@ -72,6 +72,10 @@ use overlay_view::TerminalOverlayView;
 use runtime::{RuntimeKind, RuntimeState, TmuxRuntime};
 use self::benchmark::{BENCHMARK_SAMPLE_INTERVAL, BenchmarkConfig, BenchmarkSession};
 pub(crate) use tab_strip::constants::*;
+pub(crate) use tab_strip::layout::{
+    clamp_expanded_vertical_tab_strip_width, collapsed_vertical_tab_strip_width,
+    min_expanded_vertical_tab_strip_width,
+};
 #[cfg(target_os = "macos")]
 pub(crate) use macos_file_drop::{NativeDropResult, install_native_file_drop};
 use tab_strip::state::TabStripState;
@@ -183,13 +187,6 @@ pub(super) struct TerminalViewportGeometry {
     origin_y: f32,
     width: f32,
     height: f32,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct TerminalVisualPadding {
-    horizontal: f32,
-    top: f32,
-    bottom: f32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -1864,11 +1861,6 @@ impl TerminalView {
         }
     }
 
-    fn visual_terminal_padding(&self) -> TerminalVisualPadding {
-        let (padding_x, padding_y) = self.effective_terminal_padding();
-        Self::visual_padding_for_orientation(self.vertical_tabs, padding_x, padding_y)
-    }
-
     fn native_split_content_padding(&self) -> (f32, f32) {
         if Self::uses_native_split_content_padding(
             self.runtime_uses_tmux(),
@@ -1879,25 +1871,6 @@ impl TerminalView {
             (self.padding_x, self.padding_y)
         } else {
             (0.0, 0.0)
-        }
-    }
-
-    fn visual_native_split_content_padding(&self) -> TerminalVisualPadding {
-        let (padding_x, padding_y) = self.native_split_content_padding();
-        Self::visual_padding_for_orientation(self.vertical_tabs, padding_x, padding_y)
-    }
-
-    fn visual_padding_for_orientation(
-        _vertical_tabs: bool,
-        padding_x: f32,
-        padding_y: f32,
-    ) -> TerminalVisualPadding {
-        let top = padding_y;
-        let bottom = padding_y;
-        TerminalVisualPadding {
-            horizontal: padding_x,
-            top,
-            bottom,
         }
     }
 
@@ -2111,8 +2084,8 @@ impl TerminalView {
             return None;
         }
 
-        let padding = self.visual_terminal_padding();
-        let content_padding = self.visual_native_split_content_padding();
+        let (padding_x, padding_y) = self.effective_terminal_padding();
+        let (content_padding_x, content_padding_y) = self.native_split_content_padding();
         let cell_width: f32 = size.cell_width.into();
         let cell_height: f32 = size.cell_height.into();
         if cell_width <= f32::EPSILON || cell_height <= f32::EPSILON {
@@ -2120,10 +2093,8 @@ impl TerminalView {
         }
 
         Some(TerminalViewportGeometry {
-            origin_x: padding.horizontal
-                + (f32::from(pane.left) * cell_width)
-                + content_padding.horizontal,
-            origin_y: padding.top + (f32::from(pane.top) * cell_height) + content_padding.top,
+            origin_x: padding_x + (f32::from(pane.left) * cell_width) + content_padding_x,
+            origin_y: padding_y + (f32::from(pane.top) * cell_height) + content_padding_y,
             width: cell_width * f32::from(size.cols),
             height: cell_height * f32::from(size.rows),
         })
@@ -2472,9 +2443,7 @@ impl TerminalView {
             tab_close_visibility: config.tab_close_visibility,
             tab_width_mode: config.tab_width_mode,
             vertical_tabs: config.vertical_tabs,
-            vertical_tabs_width: Self::clamp_expanded_vertical_tab_strip_width(
-                config.vertical_tabs_width,
-            ),
+            vertical_tabs_width: clamp_expanded_vertical_tab_strip_width(config.vertical_tabs_width),
             vertical_tabs_minimized: config.vertical_tabs_minimized,
             auto_hide_tabbar: config.auto_hide_tabbar,
             new_tab_animation_tab_id: None,
@@ -2724,8 +2693,7 @@ impl TerminalView {
         let tab_close_visibility_changed = self.tab_close_visibility != config.tab_close_visibility;
         let tab_width_mode_changed = self.tab_width_mode != config.tab_width_mode;
         let vertical_tabs_changed = self.vertical_tabs != config.vertical_tabs;
-        let vertical_tabs_width =
-            Self::clamp_expanded_vertical_tab_strip_width(config.vertical_tabs_width);
+        let vertical_tabs_width = clamp_expanded_vertical_tab_strip_width(config.vertical_tabs_width);
         let vertical_tabs_width_changed =
             (self.vertical_tabs_width - vertical_tabs_width).abs() > f32::EPSILON;
         let vertical_tabs_minimized_changed =
@@ -3536,43 +3504,6 @@ mod tests {
         assert!(!TerminalView::uses_native_split_content_padding(false, 1));
         assert!(TerminalView::uses_native_split_content_padding(false, 2));
         assert!(!TerminalView::uses_native_split_content_padding(true, 2));
-    }
-
-    #[test]
-    fn visual_padding_for_horizontal_tabs_stays_symmetric() {
-        assert_eq!(
-            TerminalView::visual_padding_for_orientation(false, 12.0, 8.0),
-            TerminalVisualPadding {
-                horizontal: 12.0,
-                top: 8.0,
-                bottom: 8.0,
-            }
-        );
-    }
-
-    #[test]
-    fn visual_padding_for_vertical_tabs_stays_symmetric_after_top_band_removal() {
-        assert_eq!(
-            TerminalView::visual_padding_for_orientation(true, 12.0, 8.0),
-            TerminalVisualPadding {
-                horizontal: 12.0,
-                top: 8.0,
-                bottom: 8.0,
-            }
-        );
-    }
-
-    #[test]
-    fn visual_padding_for_vertical_native_split_content_stays_symmetric() {
-        let padding = TerminalView::visual_padding_for_orientation(true, 6.0, 10.0);
-        assert_eq!(
-            padding,
-            TerminalVisualPadding {
-                horizontal: 6.0,
-                top: 10.0,
-                bottom: 10.0,
-            }
-        );
     }
 
     #[test]

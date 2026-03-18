@@ -2064,8 +2064,8 @@ impl Render for TerminalView {
         let font_size = self.font_size;
         self.sync_window_background_appearance(window);
         let effective_background_opacity = self.background_opacity_factor();
-        let effective_padding = self.visual_terminal_padding();
-        let native_split_padding = self.visual_native_split_content_padding();
+        let (effective_padding_x, effective_padding_y) = self.effective_terminal_padding();
+        let (native_split_padding_x, native_split_padding_y) = self.native_split_content_padding();
         let mut terminal_surface_bg = colors.background;
         terminal_surface_bg.a = self.scaled_background_alpha(terminal_surface_bg.a);
 
@@ -2247,13 +2247,12 @@ impl Render for TerminalView {
 
                 let cell_width: f32 = cell_size.width.into();
                 let cell_height: f32 = cell_size.height.into();
-                let pane_frame_left =
-                    effective_padding.horizontal + (f32::from(pane.left) * cell_width);
-                let pane_frame_top = effective_padding.top + (f32::from(pane.top) * cell_height);
+                let pane_frame_left = effective_padding_x + (f32::from(pane.left) * cell_width);
+                let pane_frame_top = effective_padding_y + (f32::from(pane.top) * cell_height);
                 let pane_frame_width = f32::from(pane.width) * cell_width;
                 let pane_frame_height = f32::from(pane.height) * cell_height;
-                let pane_left = pane_frame_left + native_split_padding.horizontal;
-                let pane_top = pane_frame_top + native_split_padding.top;
+                let pane_left = pane_frame_left + native_split_padding_x;
+                let pane_top = pane_frame_top + native_split_padding_y;
                 let pane_width = f32::from(terminal_size.cols) * cell_width;
                 let pane_height = f32::from(terminal_size.rows) * cell_height;
                 if pane_width <= f32::EPSILON || pane_height <= f32::EPSILON {

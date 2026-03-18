@@ -5,6 +5,21 @@ const TAB_STRIP_LAYOUT_EPSILON: f32 = 0.001;
 #[cfg(target_os = "windows")]
 const WINDOWS_CAPTION_BUTTONS_RESERVED_WIDTH: f32 = 140.0;
 
+pub(crate) const fn min_expanded_vertical_tab_strip_width() -> f32 {
+    VERTICAL_TAB_STRIP_MIN_WIDTH
+}
+
+pub(crate) fn clamp_expanded_vertical_tab_strip_width(width: f32) -> f32 {
+    width.clamp(
+        min_expanded_vertical_tab_strip_width(),
+        VERTICAL_TAB_STRIP_MAX_WIDTH,
+    )
+}
+
+pub(crate) fn collapsed_vertical_tab_strip_width(titlebar_left_padding: f32) -> f32 {
+    VERTICAL_TAB_STRIP_COLLAPSED_WIDTH.max(titlebar_left_padding)
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct VerticalNewTabShelfLayout {
     pub(crate) shelf_height: f32,

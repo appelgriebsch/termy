@@ -322,18 +322,18 @@ impl TerminalView {
         clamp: bool,
     ) -> Option<(String, CellPos)> {
         let tab = self.tabs.get(self.active_tab)?;
-        let padding = self.visual_terminal_padding();
-        let pane_content_padding = self.visual_native_split_content_padding();
+        let (padding_x, padding_y) = self.effective_terminal_padding();
+        let (pane_content_padding_x, pane_content_padding_y) = self.native_split_content_padding();
         let (x, y) = self.terminal_content_position(position);
         resolve_pane_cell_for_position(
             &tab.panes,
             tab.active_pane_id(),
             x,
             y,
-            padding.horizontal,
-            padding.top,
-            pane_content_padding.horizontal,
-            pane_content_padding.top,
+            padding_x,
+            padding_y,
+            pane_content_padding_x,
+            pane_content_padding_y,
             clamp,
         )
     }
@@ -346,17 +346,17 @@ impl TerminalView {
     ) -> Option<CellPos> {
         let tab = self.tabs.get(self.active_tab)?;
         let pane = tab.panes.iter().find(|pane| pane.id == pane_id)?;
-        let padding = self.visual_terminal_padding();
-        let pane_content_padding = self.visual_native_split_content_padding();
+        let (padding_x, padding_y) = self.effective_terminal_padding();
+        let (pane_content_padding_x, pane_content_padding_y) = self.native_split_content_padding();
         let (x, y) = self.terminal_content_position(position);
         pane_cell_for_position(
             pane,
             x,
             y,
-            padding.horizontal,
-            padding.top,
-            pane_content_padding.horizontal,
-            pane_content_padding.top,
+            padding_x,
+            padding_y,
+            pane_content_padding_x,
+            pane_content_padding_y,
             clamp,
             true,
         )

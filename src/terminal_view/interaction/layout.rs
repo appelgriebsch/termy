@@ -1,18 +1,10 @@
 use super::*;
+use crate::terminal_view::{
+    clamp_expanded_vertical_tab_strip_width, collapsed_vertical_tab_strip_width,
+};
 use crate::terminal_view::tab_strip::state::TabStripOrientation;
 
 impl TerminalView {
-    pub(crate) const fn min_expanded_vertical_tab_strip_width() -> f32 {
-        VERTICAL_TAB_STRIP_MIN_WIDTH
-    }
-
-    pub(crate) fn clamp_expanded_vertical_tab_strip_width(width: f32) -> f32 {
-        width.clamp(
-            Self::min_expanded_vertical_tab_strip_width(),
-            VERTICAL_TAB_STRIP_MAX_WIDTH,
-        )
-    }
-
     pub(in super::super) fn tab_strip_orientation(&self) -> TabStripOrientation {
         if self.vertical_tabs {
             TabStripOrientation::Vertical
@@ -27,14 +19,10 @@ impl TerminalView {
         }
 
         if self.vertical_tabs_minimized {
-            Self::collapsed_vertical_tab_strip_width()
+            collapsed_vertical_tab_strip_width(Self::titlebar_left_padding_for_platform())
         } else {
-            Self::clamp_expanded_vertical_tab_strip_width(self.vertical_tabs_width)
+            clamp_expanded_vertical_tab_strip_width(self.vertical_tabs_width)
         }
-    }
-
-    pub(in super::super) fn collapsed_vertical_tab_strip_width() -> f32 {
-        VERTICAL_TAB_STRIP_COLLAPSED_WIDTH.max(Self::titlebar_left_padding_for_platform())
     }
 
     fn tab_strip_sidebar_width(&self) -> f32 {
@@ -529,7 +517,7 @@ mod tests {
     #[test]
     fn collapsed_vertical_sidebar_width_covers_titlebar_left_inset() {
         assert!(
-            TerminalView::collapsed_vertical_tab_strip_width()
+            collapsed_vertical_tab_strip_width(TerminalView::titlebar_left_padding_for_platform())
                 >= TerminalView::titlebar_left_padding_for_platform()
         );
     }
@@ -537,16 +525,16 @@ mod tests {
     #[test]
     fn expanded_vertical_sidebar_width_clamps_to_reasonable_minimum() {
         assert_eq!(
-            TerminalView::clamp_expanded_vertical_tab_strip_width(80.0),
-            TerminalView::min_expanded_vertical_tab_strip_width()
+            clamp_expanded_vertical_tab_strip_width(80.0),
+            crate::terminal_view::min_expanded_vertical_tab_strip_width()
         );
     }
 
     #[test]
     fn expanded_vertical_sidebar_minimum_stays_above_collapsed_width() {
         assert!(
-            TerminalView::min_expanded_vertical_tab_strip_width()
-                > TerminalView::collapsed_vertical_tab_strip_width()
+            crate::terminal_view::min_expanded_vertical_tab_strip_width()
+                > collapsed_vertical_tab_strip_width(TerminalView::titlebar_left_padding_for_platform())
         );
     }
 
