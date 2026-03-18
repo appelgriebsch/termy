@@ -190,23 +190,28 @@ impl TerminalView {
         true
     }
 
+    fn update_vertical_tab_strip_width(&mut self, requested_width: f32) -> bool {
+        let next_width =
+            crate::terminal_view::tab_strip::clamp_expanded_vertical_tab_strip_width(requested_width);
+        if (self.vertical_tabs_width - next_width).abs() < f32::EPSILON {
+            return false;
+        }
+
+        self.vertical_tabs_width = next_width;
+        self.mark_tab_strip_layout_dirty();
+        self.clear_pane_render_caches();
+        self.clear_terminal_scrollbar_marker_cache();
+        self.cell_size = None;
+        true
+    }
+
     fn apply_vertical_tab_strip_resize_drag(&mut self, position: gpui::Point<Pixels>) -> bool {
         if self.vertical_tab_strip_resize_drag.is_none() || self.vertical_tabs_minimized {
             return false;
         }
 
         let pointer_x: f32 = position.x.into();
-        let next_width =
-            crate::terminal_view::tab_strip::clamp_expanded_vertical_tab_strip_width(pointer_x);
-        if (self.vertical_tabs_width - next_width).abs() < f32::EPSILON {
-            return false;
-        }
-
-        self.vertical_tabs_width = next_width;
-        self.clear_pane_render_caches();
-        self.clear_terminal_scrollbar_marker_cache();
-        self.cell_size = None;
-        true
+        self.update_vertical_tab_strip_width(pointer_x)
     }
 
     fn persist_vertical_tab_strip_width(&self) -> Result<(), String> {

@@ -148,6 +148,11 @@ impl TabStripState {
             titlebar_move_armed: false,
         }
     }
+
+    pub(crate) fn invalidate_layouts(&mut self) {
+        self.horizontal_layout_revision = self.horizontal_layout_revision.wrapping_add(1);
+        self.vertical_layout_cache.clear();
+    }
 }
 
 #[cfg(test)]
@@ -269,5 +274,61 @@ mod tests {
             second
         );
         assert_eq!(computes, 2);
+    }
+
+    #[test]
+    fn invalidating_layouts_clears_vertical_cache_and_bumps_revision() {
+        let mut state = TabStripState::new(false);
+        let first = VerticalTabStripLayoutSnapshot {
+            strip_width: 160.0,
+            compact: false,
+            header_height: 34.0,
+            top_shelf_layout: super::super::layout::VerticalNewTabShelfLayout {
+                shelf_height: 44.0,
+                button_x: 8.0,
+                button_y: 8.0,
+                button_width: 120.0,
+                button_height: 22.0,
+            },
+            bottom_shelf_layout: super::super::layout::VerticalBottomShelfLayout {
+                shelf_height: 38.0,
+                button_size: 22.0,
+                icon_size: 14.0,
+            },
+            list_top: 78.0,
+            list_height: 120.0,
+            bottom_shelf_top: 198.0,
+            divider_x: 159.0,
+            resize_handle_left: 156.0,
+            content_height: 32.0,
+            rows: vec![super::super::layout::VerticalTabRowLayout {
+                index: 0,
+                top: 0.0,
+                height: 32.0,
+            }],
+        };
+        let second = VerticalTabStripLayoutSnapshot {
+            strip_width: 240.0,
+            divider_x: 239.0,
+            resize_handle_left: 236.0,
+            ..first.clone()
+        };
+        let initial_revision = state.horizontal_layout_revision;
+
+        assert_eq!(
+            state.vertical_layout_cache.get_or_insert_with(|| first.clone()),
+            first
+        );
+
+        state.invalidate_layouts();
+
+        assert_eq!(
+            state.horizontal_layout_revision,
+            initial_revision.wrapping_add(1)
+        );
+        assert_eq!(
+            state.vertical_layout_cache.get_or_insert_with(|| second.clone()),
+            second
+        );
     }
 }

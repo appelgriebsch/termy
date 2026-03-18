@@ -336,9 +336,7 @@ impl TerminalView {
     }
 
     pub(crate) fn mark_tab_strip_layout_dirty(&mut self) {
-        self.tab_strip.horizontal_layout_revision =
-            self.tab_strip.horizontal_layout_revision.wrapping_add(1);
-        self.tab_strip.vertical_layout_cache.clear();
+        self.tab_strip.invalidate_layouts();
     }
 
     pub(crate) fn sync_tab_display_widths_for_viewport_if_needed(
