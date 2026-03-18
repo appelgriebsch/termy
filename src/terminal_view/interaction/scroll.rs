@@ -235,7 +235,7 @@ impl TerminalView {
         let window_y: f32 = position.y.into();
         let local_y = terminal_scrollbar_local_y_from_window_y(
             window_y,
-            self.chrome_height(),
+            self.terminal_content_top_inset(),
             surface.origin_y,
             surface.height,
         )?;

@@ -97,7 +97,7 @@ impl TerminalView {
         let terminal_width =
             (viewport_width - self.tab_strip_sidebar_width() - (padding_x * 2.0)).max(cell_width * 2.0);
         let terminal_height =
-            (viewport_height - self.chrome_height() - (padding_y * 2.0)).max(cell_height);
+            (viewport_height - self.terminal_content_top_inset() - (padding_y * 2.0)).max(cell_height);
         let backend_mode = self.runtime_kind();
         let cols = Self::compute_terminal_cols(terminal_width, cell_width, false);
         let rows = Self::compute_terminal_rows(terminal_height, cell_height);

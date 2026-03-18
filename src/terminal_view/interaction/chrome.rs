@@ -79,7 +79,7 @@ impl TerminalView {
         let viewport_height = self.last_viewport_size_px.map_or(0.0, |(_, height)| height as f32);
         Self::vertical_tabs_list_height_for(
             viewport_height,
-            self.chrome_height(),
+            self.vertical_tab_strip_top_inset(),
             header_height,
             top_shelf_height,
             bottom_slot_height,
@@ -94,7 +94,7 @@ impl TerminalView {
         let y: f32 = position.y.into();
         (
             x - self.tab_strip_sidebar_width(),
-            Self::window_y_to_terminal_content_y(y, self.chrome_height()),
+            Self::window_y_to_terminal_content_y(y, self.terminal_content_top_inset()),
         )
     }
 
@@ -124,17 +124,53 @@ impl TerminalView {
         }
     }
 
-    pub(in super::super) fn update_banner_height(&self) -> f32 {
-        #[cfg(target_os = "macos")]
-        if self.show_update_banner {
-            return UPDATE_BANNER_HEIGHT;
-        }
-        0.0
+    fn terminal_content_top_inset_for(
+        vertical_tabs: bool,
+        show_tab_strip_chrome: bool,
+        show_update_banner: bool,
+    ) -> f32 {
+        Self::window_titlebar_height_for(vertical_tabs, show_tab_strip_chrome)
+            + if show_update_banner {
+                UPDATE_BANNER_HEIGHT
+            } else {
+                0.0
+            }
     }
 
-    pub(in super::super) fn chrome_height(&self) -> f32 {
-        Self::window_titlebar_height_for(self.vertical_tabs, self.should_render_tab_strip_chrome())
-            + self.update_banner_height()
+    fn vertical_tab_strip_top_inset_for(
+        vertical_tabs: bool,
+        show_tab_strip_chrome: bool,
+        show_update_banner: bool,
+    ) -> f32 {
+        let titlebar_height = Self::window_titlebar_height_for(vertical_tabs, show_tab_strip_chrome);
+        // When the vertical sidebar owns the top chrome, keep banner spacing
+        // scoped to the terminal pane so the sidebar geometry stays flush.
+        if vertical_tabs && show_tab_strip_chrome {
+            titlebar_height
+        } else {
+            titlebar_height
+                + if show_update_banner {
+                    UPDATE_BANNER_HEIGHT
+                } else {
+                    0.0
+                }
+        }
+    }
+
+    pub(in super::super) fn terminal_content_top_inset(&self) -> f32 {
+        Self::terminal_content_top_inset_for(
+            self.vertical_tabs,
+            self.should_render_tab_strip_chrome(),
+            self.show_update_banner,
+        )
+    }
+
+    pub(in super::super) fn vertical_tab_strip_top_inset(&self) -> f32 {
+        Self::vertical_tab_strip_top_inset_for(
+            self.vertical_tabs,
+            self.should_render_tab_strip_chrome(),
+            self.show_update_banner,
+        )
     }
 }
 
@@ -176,6 +212,38 @@ mod tests {
     #[test]
     fn window_titlebar_height_stays_when_vertical_sidebar_is_hidden() {
         assert_eq!(TerminalView::window_titlebar_height_for(true, false), TerminalView::titlebar_height());
+    }
+
+    #[test]
+    fn terminal_content_top_inset_includes_banner_for_horizontal_tabs() {
+        assert_eq!(
+            TerminalView::terminal_content_top_inset_for(false, true, true),
+            TerminalView::titlebar_height() + UPDATE_BANNER_HEIGHT
+        );
+    }
+
+    #[test]
+    fn terminal_content_top_inset_includes_banner_for_visible_vertical_tabs() {
+        assert_eq!(
+            TerminalView::terminal_content_top_inset_for(true, true, true),
+            UPDATE_BANNER_HEIGHT
+        );
+    }
+
+    #[test]
+    fn vertical_tab_strip_top_inset_ignores_banner_when_sidebar_is_visible() {
+        assert_eq!(
+            TerminalView::vertical_tab_strip_top_inset_for(true, true, true),
+            0.0
+        );
+    }
+
+    #[test]
+    fn vertical_tab_strip_top_inset_keeps_banner_when_sidebar_chrome_is_hidden() {
+        assert_eq!(
+            TerminalView::vertical_tab_strip_top_inset_for(true, false, true),
+            TerminalView::titlebar_height() + UPDATE_BANNER_HEIGHT
+        );
     }
 
     #[test]

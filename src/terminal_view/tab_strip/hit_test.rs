@@ -66,7 +66,7 @@ impl TerminalView {
     }
 
     pub(crate) fn vertical_tab_strip_interactive_hit_test(&self, x: f32, y: f32) -> bool {
-        let local_y = y - self.chrome_height();
+        let local_y = y - self.vertical_tab_strip_top_inset();
         if local_y < 0.0 {
             return false;
         }
