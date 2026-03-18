@@ -1431,6 +1431,7 @@ impl TerminalView {
         let new_tab_anim = self.new_tab_animation_progress(now);
         let compact = self.vertical_tabs_minimized;
         let strip_width = self.effective_vertical_tab_strip_width();
+        let header_height = self.vertical_tab_strip_header_height();
         let utility_dock_height = self.vertical_tab_strip_utility_dock_height();
         let active_tab_index = (self.active_tab < self.tabs.len()).then_some(self.active_tab);
         let tab_heights: Vec<f32> = (0..self.tabs.len())
@@ -1447,12 +1448,14 @@ impl TerminalView {
             chrome::VerticalTabChromeInput {
                 active_index: active_tab_index,
                 strip_width,
-                control_rail_height: self.vertical_tab_strip_header_height(),
+                control_rail_height: header_height,
                 tab_item_gap: TAB_ITEM_GAP,
                 external_top_seam: true,
             },
         );
         debug_assert_eq!(chrome_layout.tab_strokes.len(), self.tabs.len());
+        let titlebar_block =
+            self.render_vertical_titlebar_branding(window, colors, font_family, tabbar_bg, true);
         let control_button_size = if compact { 18.0 } else { TABBAR_NEW_TAB_BUTTON_SIZE };
         let control_icon_size = if compact { 11.0 } else { TABBAR_NEW_TAB_ICON_SIZE };
         let new_tab_button = self.render_tab_strip_control_button(
@@ -1624,6 +1627,7 @@ impl TerminalView {
                     .h_full()
                     .flex()
                     .flex_col()
+                    .children(titlebar_block)
                     .child(
                         div()
                             .id("vertical-tabs-scroll-viewport")

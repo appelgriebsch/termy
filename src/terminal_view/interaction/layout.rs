@@ -24,11 +24,19 @@ impl TerminalView {
     }
 
     fn tab_strip_sidebar_width(&self) -> f32 {
-        self.effective_vertical_tab_strip_width()
+        if self.vertical_tabs && self.should_render_tab_strip_chrome() {
+            self.effective_vertical_tab_strip_width()
+        } else {
+            0.0
+        }
     }
 
     pub(in super::super) fn vertical_tab_strip_header_height(&self) -> f32 {
-        0.0
+        if self.vertical_tabs && self.should_render_tab_strip_chrome() {
+            TABBAR_HEIGHT
+        } else {
+            0.0
+        }
     }
 
     pub(in super::super) fn vertical_tab_strip_utility_dock_height(&self) -> f32 {
@@ -398,6 +406,17 @@ impl TerminalView {
         }
     }
 
+    pub(in super::super) fn window_titlebar_height_for(
+        vertical_tabs: bool,
+        show_tab_strip_chrome: bool,
+    ) -> f32 {
+        if vertical_tabs && show_tab_strip_chrome {
+            0.0
+        } else {
+            Self::titlebar_height()
+        }
+    }
+
     pub(in super::super) fn update_banner_height(&self) -> f32 {
         #[cfg(target_os = "macos")]
         if self.show_update_banner {
@@ -407,7 +426,8 @@ impl TerminalView {
     }
 
     pub(in super::super) fn chrome_height(&self) -> f32 {
-        Self::titlebar_height() + self.update_banner_height()
+        Self::window_titlebar_height_for(self.vertical_tabs, self.should_render_tab_strip_chrome())
+            + self.update_banner_height()
     }
 }
 
@@ -448,6 +468,21 @@ mod tests {
     #[test]
     fn compute_terminal_rows_enforces_minimum_one_row() {
         assert_eq!(TerminalView::compute_terminal_rows(0.5, 12.0), 1);
+    }
+
+    #[test]
+    fn window_titlebar_height_keeps_horizontal_strip_height() {
+        assert_eq!(TerminalView::window_titlebar_height_for(false, true), TerminalView::titlebar_height());
+    }
+
+    #[test]
+    fn window_titlebar_height_drops_for_visible_vertical_sidebar() {
+        assert_eq!(TerminalView::window_titlebar_height_for(true, true), 0.0);
+    }
+
+    #[test]
+    fn window_titlebar_height_stays_when_vertical_sidebar_is_hidden() {
+        assert_eq!(TerminalView::window_titlebar_height_for(true, false), TerminalView::titlebar_height());
     }
 
     #[test]

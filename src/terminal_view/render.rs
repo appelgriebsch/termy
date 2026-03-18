@@ -2016,7 +2016,10 @@ impl TerminalView {
                     div()
                         .id("update-banner-overlay")
                         .absolute()
-                        .top(px(Self::titlebar_height()))
+                        .top(px(Self::window_titlebar_height_for(
+                            self.vertical_tabs,
+                            self.should_render_tab_strip_chrome(),
+                        )))
                         .left_0()
                         .right_0()
                         .child(banner)
@@ -2061,8 +2064,8 @@ impl Render for TerminalView {
         let font_size = self.font_size;
         self.sync_window_background_appearance(window);
         let effective_background_opacity = self.background_opacity_factor();
-        let (effective_padding_x, effective_padding_y) = self.effective_terminal_padding();
-        let (native_split_padding_x, native_split_padding_y) = self.native_split_content_padding();
+        let effective_padding = self.visual_terminal_padding();
+        let native_split_padding = self.visual_native_split_content_padding();
         let mut terminal_surface_bg = colors.background;
         terminal_surface_bg.a = self.scaled_background_alpha(terminal_surface_bg.a);
 
@@ -2244,12 +2247,13 @@ impl Render for TerminalView {
 
                 let cell_width: f32 = cell_size.width.into();
                 let cell_height: f32 = cell_size.height.into();
-                let pane_frame_left = effective_padding_x + (f32::from(pane.left) * cell_width);
-                let pane_frame_top = effective_padding_y + (f32::from(pane.top) * cell_height);
+                let pane_frame_left =
+                    effective_padding.horizontal + (f32::from(pane.left) * cell_width);
+                let pane_frame_top = effective_padding.top + (f32::from(pane.top) * cell_height);
                 let pane_frame_width = f32::from(pane.width) * cell_width;
                 let pane_frame_height = f32::from(pane.height) * cell_height;
-                let pane_left = pane_frame_left + native_split_padding_x;
-                let pane_top = pane_frame_top + native_split_padding_y;
+                let pane_left = pane_frame_left + native_split_padding.horizontal;
+                let pane_top = pane_frame_top + native_split_padding.top;
                 let pane_width = f32::from(terminal_size.cols) * cell_width;
                 let pane_height = f32::from(terminal_size.rows) * cell_height;
                 if pane_width <= f32::EPSILON || pane_height <= f32::EPSILON {
@@ -2421,21 +2425,21 @@ impl Render for TerminalView {
         self.record_render_metrics_for_pass(render_pass_cache_counts);
 
         let focus_handle = self.focus_handle.clone();
-        let titlebar_height = Self::titlebar_height();
         let tabbar_bg = terminal_surface_bg;
         let show_tab_strip_chrome = self.should_render_tab_strip_chrome();
+        let titlebar_height =
+            Self::window_titlebar_height_for(self.vertical_tabs, show_tab_strip_chrome);
         let show_horizontal_tabbar = !self.vertical_tabs && show_tab_strip_chrome;
         let tabs_row = show_horizontal_tabbar
             .then(|| self.render_tab_strip(window, &colors, &font_family, tabbar_bg, cx));
-        let vertical_titlebar_branding = self
-            .vertical_tabs
+        let vertical_titlebar_branding = (self.vertical_tabs && !show_tab_strip_chrome)
             .then(|| {
                 self.render_vertical_titlebar_branding(
                     window,
                     &colors,
                     &font_family,
                     tabbar_bg,
-                    show_tab_strip_chrome,
+                    false,
                 )
             })
             .flatten();

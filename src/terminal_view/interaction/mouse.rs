@@ -276,7 +276,7 @@ impl TerminalView {
             .map(|pane| u32::from(pane.top).saturating_add(u32::from(pane.height)))
             .max()
             .unwrap_or(0);
-        let (padding_x, padding_y) = self.effective_terminal_padding();
+        let padding = self.visual_terminal_padding();
         let (x, y) = self.terminal_content_position(position);
         let mut best: Option<(f32, PaneResizeAxis, PaneResizeEdge, String)> = None;
 
@@ -292,8 +292,8 @@ impl TerminalView {
                 continue;
             }
 
-            let left = padding_x + (f32::from(pane.left) * cell_width);
-            let top = padding_y + (f32::from(pane.top) * cell_height);
+            let left = padding.horizontal + (f32::from(pane.left) * cell_width);
+            let top = padding.top + (f32::from(pane.top) * cell_height);
             let right = left + (f32::from(size.cols) * cell_width);
             let bottom = top + (f32::from(size.rows) * cell_height);
             let inside = x >= left && x <= right && y >= top && y <= bottom;

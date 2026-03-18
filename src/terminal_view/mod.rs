@@ -185,6 +185,13 @@ pub(super) struct TerminalViewportGeometry {
     height: f32,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct TerminalVisualPadding {
+    horizontal: f32,
+    top: f32,
+    bottom: f32,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct TerminalScrollbarDragState {
     thumb_grab_offset: f32,
@@ -1857,6 +1864,11 @@ impl TerminalView {
         }
     }
 
+    fn visual_terminal_padding(&self) -> TerminalVisualPadding {
+        let (padding_x, padding_y) = self.effective_terminal_padding();
+        Self::visual_padding_for_orientation(self.vertical_tabs, padding_x, padding_y)
+    }
+
     fn native_split_content_padding(&self) -> (f32, f32) {
         if Self::uses_native_split_content_padding(
             self.runtime_uses_tmux(),
@@ -1867,6 +1879,31 @@ impl TerminalView {
             (self.padding_x, self.padding_y)
         } else {
             (0.0, 0.0)
+        }
+    }
+
+    fn visual_native_split_content_padding(&self) -> TerminalVisualPadding {
+        let (padding_x, padding_y) = self.native_split_content_padding();
+        Self::visual_padding_for_orientation(self.vertical_tabs, padding_x, padding_y)
+    }
+
+    fn visual_padding_for_orientation(
+        vertical_tabs: bool,
+        padding_x: f32,
+        padding_y: f32,
+    ) -> TerminalVisualPadding {
+        if vertical_tabs {
+            TerminalVisualPadding {
+                horizontal: padding_x,
+                top: 0.0,
+                bottom: padding_y,
+            }
+        } else {
+            TerminalVisualPadding {
+                horizontal: padding_x,
+                top: padding_y,
+                bottom: padding_y,
+            }
         }
     }
 
@@ -2080,8 +2117,8 @@ impl TerminalView {
             return None;
         }
 
-        let (padding_x, padding_y) = self.effective_terminal_padding();
-        let (content_padding_x, content_padding_y) = self.native_split_content_padding();
+        let padding = self.visual_terminal_padding();
+        let content_padding = self.visual_native_split_content_padding();
         let cell_width: f32 = size.cell_width.into();
         let cell_height: f32 = size.cell_height.into();
         if cell_width <= f32::EPSILON || cell_height <= f32::EPSILON {
@@ -2089,8 +2126,10 @@ impl TerminalView {
         }
 
         Some(TerminalViewportGeometry {
-            origin_x: padding_x + (f32::from(pane.left) * cell_width) + content_padding_x,
-            origin_y: padding_y + (f32::from(pane.top) * cell_height) + content_padding_y,
+            origin_x: padding.horizontal
+                + (f32::from(pane.left) * cell_width)
+                + content_padding.horizontal,
+            origin_y: padding.top + (f32::from(pane.top) * cell_height) + content_padding.top,
             width: cell_width * f32::from(size.cols),
             height: cell_height * f32::from(size.rows),
         })
@@ -3504,6 +3543,43 @@ mod tests {
         assert!(!TerminalView::uses_native_split_content_padding(false, 1));
         assert!(TerminalView::uses_native_split_content_padding(false, 2));
         assert!(!TerminalView::uses_native_split_content_padding(true, 2));
+    }
+
+    #[test]
+    fn visual_padding_for_horizontal_tabs_stays_symmetric() {
+        assert_eq!(
+            TerminalView::visual_padding_for_orientation(false, 12.0, 8.0),
+            TerminalVisualPadding {
+                horizontal: 12.0,
+                top: 8.0,
+                bottom: 8.0,
+            }
+        );
+    }
+
+    #[test]
+    fn visual_padding_for_vertical_tabs_flushes_top_edge() {
+        assert_eq!(
+            TerminalView::visual_padding_for_orientation(true, 12.0, 8.0),
+            TerminalVisualPadding {
+                horizontal: 12.0,
+                top: 0.0,
+                bottom: 8.0,
+            }
+        );
+    }
+
+    #[test]
+    fn visual_padding_for_vertical_native_split_content_flushes_top_edge() {
+        let padding = TerminalView::visual_padding_for_orientation(true, 6.0, 10.0);
+        assert_eq!(
+            padding,
+            TerminalVisualPadding {
+                horizontal: 6.0,
+                top: 0.0,
+                bottom: 10.0,
+            }
+        );
     }
 
     #[test]
