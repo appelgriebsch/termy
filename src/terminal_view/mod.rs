@@ -165,6 +165,20 @@ const NATIVE_PANE_MIN_ROWS: u16 = 8;
 #[cfg(debug_assertions)]
 const RENDER_METRICS_LOG_INTERVAL: Duration = Duration::from_secs(1);
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct TerminalOverlayGeometry {
+    panel_radius: f32,
+    input_radius: f32,
+    control_radius: f32,
+}
+
+// Floating terminal chrome stays square to match the app's shared overlay language.
+const TERMINAL_OVERLAY_GEOMETRY: TerminalOverlayGeometry = TerminalOverlayGeometry {
+    panel_radius: 0.0,
+    input_radius: 0.0,
+    control_radius: 0.0,
+};
+
 type TabId = u64;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -3551,6 +3565,13 @@ impl TerminalView {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn terminal_overlay_geometry_defaults_to_square_edges() {
+        assert_eq!(TERMINAL_OVERLAY_GEOMETRY.panel_radius, 0.0);
+        assert_eq!(TERMINAL_OVERLAY_GEOMETRY.input_radius, 0.0);
+        assert_eq!(TERMINAL_OVERLAY_GEOMETRY.control_radius, 0.0);
+    }
 
     #[cfg(debug_assertions)]
     #[test]

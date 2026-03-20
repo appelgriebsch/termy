@@ -1170,7 +1170,7 @@ impl TerminalView {
                 div()
                     .px(px(9.0))
                     .py(px(3.0))
-                    .rounded_md()
+                    .rounded(px(TERMINAL_OVERLAY_GEOMETRY.control_radius))
                     .bg(button_bg)
                     .border_1()
                     .border_color(button_border)
@@ -1402,7 +1402,7 @@ impl TerminalView {
                     .id(("toast", toast_id))
                     .max_w(px(480.0))
                     .mt(px(slide_offset))
-                    .rounded_lg()
+                    .rounded(px(TERMINAL_OVERLAY_GEOMETRY.panel_radius))
                     .bg(bg)
                     .border_1()
                     .border_color(border)
@@ -1445,7 +1445,7 @@ impl TerminalView {
                                         let mut action_bg = accent;
                                         action_bg.a = 0.18;
                                         div()
-                                            .rounded(px(6.0))
+                                            .rounded(px(TERMINAL_OVERLAY_GEOMETRY.control_radius))
                                             .px(px(8.0))
                                             .py(px(4.0))
                                             .text_size(px(11.0))
@@ -1474,7 +1474,7 @@ impl TerminalView {
                                         let mut copied_bg = accent;
                                         copied_bg.a = 0.22;
                                         div()
-                                            .rounded(px(6.0))
+                                            .rounded(px(TERMINAL_OVERLAY_GEOMETRY.control_radius))
                                             .px(px(8.0))
                                             .py(px(4.0))
                                             .text_size(px(11.0))
@@ -1486,7 +1486,7 @@ impl TerminalView {
                                     .children((toast_action_label.is_none() && !is_copied && is_hovered).then(|| {
                                         let toast_message_for_copy = toast_message.clone();
                                         div()
-                                            .rounded(px(6.0))
+                                            .rounded(px(TERMINAL_OVERLAY_GEOMETRY.control_radius))
                                             .px(px(8.0))
                                             .py(px(4.0))
                                             .text_size(px(11.0))
@@ -1916,7 +1916,7 @@ impl TerminalView {
                         div()
                             .px(px(14.0))
                             .py(px(8.0))
-                            .rounded(px(6.0))
+                            .rounded(px(TERMINAL_OVERLAY_GEOMETRY.panel_radius))
                             .bg(overlay_style.chrome_panel_background(0.84))
                             .border_1()
                             .border_color(overlay_style.chrome_panel_neutral(0.24))
@@ -1954,7 +1954,7 @@ impl TerminalView {
                 .right(px(10.0))
                 .px(px(10.0))
                 .py(px(8.0))
-                .rounded(px(6.0))
+                .rounded(px(TERMINAL_OVERLAY_GEOMETRY.panel_radius))
                 .bg(overlay_style.chrome_panel_background(0.84))
                 .border_1()
                 .border_color(overlay_style.chrome_panel_neutral(0.24))
